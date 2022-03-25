@@ -104,17 +104,8 @@ where
 	any_size_parser().then_with(move |n| repeated.clone().exactly(n))
 }
 
-fn list_span_parser<P, O>(parser: P) -> impl Parser<Range>
-where
-	P: Parser<O>,
-{
-	let repeated = parser.repeated();
-
-	any_size_parser().then_with(move |n| repeated.clone().exactly(n).map_with_span(|_, s| s))
-}
-
 fn string_parser() -> impl Parser<Range> {
-	list_span_parser(u8_parser().ignored())
+	list_of_parser(u8_parser().ignored()).map_with_span(|_, s| s)
 }
 
 fn meta_parser() -> impl Parser<()> {
@@ -128,6 +119,16 @@ fn meta_parser() -> impl Parser<()> {
 		.then(num_upval)
 		.then(is_vararg)
 		.ignored()
+}
+
+fn code_parser() -> impl Parser<Range> {
+	any_size_parser().then_with(|n| {
+		u32_parser()
+			.ignored()
+			.repeated()
+			.exactly(n)
+			.map_with_span(|_, s| s)
+	})
 }
 
 fn constant_parser() -> impl Parser<Range> {
@@ -206,15 +207,13 @@ fn function_parser() -> impl Parser<Function> {
 		}
 	}
 
-	// FIXME: I can't seem to find a way to make `chumsky` parse the
-	// debug section without taking ownership of the function.
 	fn read_remaining(func: Function) -> impl Parser<Function> {
 		debug_info_parser(func.code.len() / 4).to(func)
 	}
 
 	let meta = meta_parser();
 
-	let code_list = list_span_parser(u32_parser().ignored());
+	let code_list = code_parser();
 	let constant_list = list_of_parser(constant_parser());
 	let reference_list = list_of_parser(any_size_parser());
 
