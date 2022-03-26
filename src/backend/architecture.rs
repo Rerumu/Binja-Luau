@@ -1,7 +1,7 @@
 use binaryninja::{
 	architecture::{
-		Architecture, BranchInfo, CoreArchitecture, CoreFlag, CoreFlagClass, CoreFlagGroup,
-		CoreFlagWrite, CustomArchitectureHandle, InstructionInfo,
+		Architecture as BaseArchitecture, BranchInfo, CoreArchitecture, CoreFlag, CoreFlagClass,
+		CoreFlagGroup, CoreFlagWrite, CustomArchitectureHandle, InstructionInfo,
 	},
 	binaryninjacore_sys::BNLowLevelILFlagCondition,
 	llil::{LiftedExpr, Lifter},
@@ -18,12 +18,18 @@ use super::{
 	text_builder::TextBuilder,
 };
 
-pub struct Arch {
+pub struct Architecture {
 	pub handle: CustomArchitectureHandle<Self>,
 	pub core: CoreArchitecture,
 }
 
-impl Architecture for Arch {
+impl Architecture {
+	pub fn new(handle: CustomArchitectureHandle<Self>, core: CoreArchitecture) -> Self {
+		Self { handle, core }
+	}
+}
+
+impl BaseArchitecture for Architecture {
 	type Handle = CustomArchitectureHandle<Self>;
 
 	type RegisterInfo = RegisterInfo;
@@ -256,7 +262,7 @@ impl Architecture for Arch {
 	}
 }
 
-impl AsRef<CoreArchitecture> for Arch {
+impl AsRef<CoreArchitecture> for Architecture {
 	fn as_ref(&self) -> &CoreArchitecture {
 		&self.core
 	}

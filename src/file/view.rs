@@ -19,6 +19,12 @@ pub struct ViewType {
 	pub typ: BinaryViewType,
 }
 
+impl ViewType {
+	pub fn new(typ: BinaryViewType) -> Self {
+		Self { typ }
+	}
+}
+
 impl AsRef<BinaryViewType> for ViewType {
 	fn as_ref(&self) -> &BinaryViewType {
 		&self.typ

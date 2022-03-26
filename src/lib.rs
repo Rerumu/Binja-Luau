@@ -2,17 +2,17 @@
 
 use binaryninja::{architecture::register_architecture, custombinaryview::register_view_type};
 
+use backend::architecture::Architecture;
 use file::view::ViewType;
-use platform::architecture::Arch;
 
+mod backend;
 mod file;
 mod instruction;
-mod platform;
 
 #[no_mangle]
 pub extern "C" fn CorePluginInit() -> bool {
-	register_architecture("luau", |handle, core| Arch { handle, core });
-	register_view_type("Luau", "Roblox Luau", |typ| ViewType { typ });
+	register_view_type("Luau", "Roblox Luau", ViewType::new);
+	register_architecture("luau", Architecture::new);
 
 	true
 }
