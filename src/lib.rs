@@ -11,8 +11,9 @@ mod instruction;
 
 #[no_mangle]
 pub extern "C" fn CorePluginInit() -> bool {
-	register_view_type("Luau", "Roblox Luau", ViewType::new);
-	register_architecture("luau", Architecture::new);
+	let arch = register_architecture("luau", Architecture::new);
+
+	register_view_type("Luau", "Roblox Luau", |typ| ViewType::new(typ, arch));
 
 	true
 }

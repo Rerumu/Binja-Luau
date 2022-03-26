@@ -44,6 +44,7 @@ impl Function {
 	}
 }
 
+#[derive(Default)]
 pub struct Module {
 	function_list: Box<[Function]>,
 	string_list: Box<[Range]>,
