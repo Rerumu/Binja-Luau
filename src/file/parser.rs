@@ -65,6 +65,14 @@ impl Module {
 
 		func.code().start as u64
 	}
+
+	pub fn by_code_address(&self, addr: u64) -> Option<&Function> {
+		let addr = addr as usize;
+
+		self.function_list()
+			.iter()
+			.find(|func| func.code().contains(&addr))
+	}
 }
 
 fn u8_parser() -> impl Parser<u8> {

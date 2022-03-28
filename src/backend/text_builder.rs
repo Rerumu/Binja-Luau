@@ -1,6 +1,10 @@
+use std::ops::Range;
+
 use binaryninja::architecture::{InstructionTextToken, InstructionTextTokenContents};
 
-use crate::instruction::{builtin::BuiltIn, decoder::get_jump_target, opcode::Opcode};
+use crate::instruction::{
+	builtin::BuiltIn, decoder::get_jump_target, import::Import, opcode::Opcode,
+};
 
 #[derive(Default)]
 pub struct TextBuilder {
@@ -74,11 +78,19 @@ impl TextBuilder {
 		self.buffer.push(token);
 	}
 
-	pub fn add_built_in(&mut self, index: i32) {
-		let name = match u8::try_from(index)
-			.ok()
-			.and_then(|v| BuiltIn::try_from(v).ok())
-		{
+	pub fn add_constant(&mut self, index: usize, list: &[Range<usize>]) {
+		let target = list.get(index).map_or(0, |v| v.start as u64);
+		let token = InstructionTextToken::new(
+			InstructionTextTokenContents::PossibleAddress(target),
+			target.to_string(),
+		);
+
+		self.add_space();
+		self.buffer.push(token);
+	}
+
+	pub fn add_built_in(&mut self, index: u8) {
+		let name = match BuiltIn::try_from(index).ok() {
 			Some(v) => v.to_string(),
 			None => "unknown".to_string(),
 		};
@@ -91,6 +103,12 @@ impl TextBuilder {
 		self.buffer.push(wrap.clone());
 		self.buffer.push(token);
 		self.buffer.push(wrap);
+	}
+
+	pub fn add_import(&mut self, encoded: u32, list: &[Range<usize>]) {
+		for name in Import::new(encoded) {
+			self.add_constant(name, list);
+		}
 	}
 }
 

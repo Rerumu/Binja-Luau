@@ -159,10 +159,20 @@ impl BaseArchitecture for Architecture {
 				// OpType::Global => todo!(),
 				OpType::Boolean => builder.add_boolean(raw != 0),
 				OpType::Integer => builder.add_integer(raw),
-				// OpType::Constant => todo!(),
+				OpType::Constant => {
+					let module = MODULE.read().unwrap();
+					let ref_list = module.by_code_address(addr)?.constant_list();
+
+					builder.add_constant(raw.try_into().ok()?, ref_list);
+				}
 				// OpType::Function => todo!(),
-				// OpType::Import => todo!(),
-				OpType::BuiltIn => builder.add_built_in(raw),
+				OpType::Import => {
+					let module = MODULE.read().unwrap();
+					let ref_list = module.by_code_address(addr)?.constant_list();
+
+					builder.add_import(raw as u32, ref_list);
+				}
+				OpType::BuiltIn => builder.add_built_in(raw.try_into().ok()?),
 				_ => builder.add_failure(),
 			}
 		}
