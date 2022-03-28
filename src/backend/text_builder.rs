@@ -6,7 +6,7 @@ use crate::{
 	decoder::{
 		inst::get_jump_target, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown,
 	},
-	file::parser::Function,
+	file::data::Function,
 };
 
 const MAX_INST_PADDING: usize = Opcode::PrepVariadic.mnemonic().len();

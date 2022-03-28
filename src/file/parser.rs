@@ -1,11 +1,11 @@
 use binaryninja::binaryview::{BinaryView, BinaryViewBase, BinaryViewExt};
 use chumsky::prelude::{choice, filter, just};
 
-const LUAU_VERSION: u8 = 2;
+use super::data::{Function, Module, Range};
 
 trait Parser<O> = chumsky::Parser<u8, O, Error = chumsky::error::Cheap<u8>> + Clone;
 
-type Range = std::ops::Range<usize>;
+const LUAU_VERSION: u8 = 2;
 
 #[repr(u8)]
 enum TypeConstant {
@@ -16,63 +16,6 @@ enum TypeConstant {
 	Import,
 	Table,
 	Closure,
-}
-
-#[derive(Clone)]
-pub struct Function {
-	position: Range,
-	code: Range,
-	constant_list: Box<[Range]>,
-	reference_list: Box<[usize]>,
-}
-
-impl Function {
-	pub fn position(&self) -> Range {
-		self.position.clone()
-	}
-
-	pub fn code(&self) -> Range {
-		self.code.clone()
-	}
-
-	pub fn constant_list(&self) -> &[Range] {
-		&self.constant_list
-	}
-
-	pub fn reference_list(&self) -> &[usize] {
-		&self.reference_list
-	}
-}
-
-#[derive(Default)]
-pub struct Module {
-	function_list: Box<[Function]>,
-	string_list: Box<[Range]>,
-	start_id: usize,
-}
-
-impl Module {
-	pub fn function_list(&self) -> &[Function] {
-		&self.function_list
-	}
-
-	pub fn string_list(&self) -> &[Range] {
-		&self.string_list
-	}
-
-	pub fn entry_point(&self) -> u64 {
-		let func = &self.function_list()[self.start_id];
-
-		func.code().start as u64
-	}
-
-	pub fn by_code_address(&self, addr: u64) -> Option<&Function> {
-		let addr = addr as usize;
-
-		self.function_list()
-			.iter()
-			.find(|func| func.code().contains(&addr))
-	}
 }
 
 fn u8_parser() -> impl Parser<u8> {
@@ -208,16 +151,11 @@ fn function_parser() -> impl Parser<Function> {
 	type Data = ((Range, Vec<Range>), Vec<usize>);
 
 	fn to_function(data: Data, position: Range) -> Function {
-		Function {
-			position,
-			code: data.0 .0,
-			constant_list: data.0 .1.into(),
-			reference_list: data.1.into(),
-		}
+		Function::new(position, data.0 .0, data.0 .1.into(), data.1.into())
 	}
 
 	fn read_remaining(func: Function) -> impl Parser<Function> {
-		debug_info_parser(func.code.len() / 4).to(func)
+		debug_info_parser(func.code().len() / 4).to(func)
 	}
 
 	let meta = meta_parser();
@@ -242,11 +180,7 @@ fn module_parser() -> impl Parser<Module> {
 	type Data = ((Vec<Range>, Vec<Function>), usize);
 
 	fn to_module(data: Data) -> Module {
-		Module {
-			function_list: data.0 .1.into(),
-			string_list: data.0 .0.into(),
-			start_id: data.1,
-		}
+		Module::new(data.0 .1.into(), data.0 .0.into(), data.1)
 	}
 
 	let version = just(LUAU_VERSION);

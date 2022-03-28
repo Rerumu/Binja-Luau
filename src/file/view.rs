@@ -13,7 +13,10 @@ use binaryninja::{
 	Endianness,
 };
 
-use super::parser::{parse, Function, Module};
+use super::{
+	data::{Function, Module},
+	parser::parse,
+};
 
 pub static MODULE: SyncLazy<RwLock<Module>> = SyncLazy::new(RwLock::default);
 
