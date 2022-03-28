@@ -35,10 +35,10 @@ fn any_size_parser() -> impl Parser<usize> {
 		let head = data.0.into_iter();
 		let tail = std::iter::once(data.1);
 
-		head.into_iter()
-			.chain(tail)
+		head.chain(tail)
+			.map(usize::from)
 			.enumerate()
-			.fold(0, |acc, (i, v)| acc | (v as usize & 0xFF) << (i * 7))
+			.fold(0, |acc, (i, v)| acc | (v & 0x7F) << (i * 7))
 	}
 
 	filter(|v| v & 0x80 != 0)
@@ -119,8 +119,8 @@ fn line_info_parser(len: usize) -> impl Parser<()> {
 	line_gap
 		.then_with(move |g| {
 			let interval = ((len - 1) >> g) + 1;
-			let line_info = u8_parser().repeated().exactly(len);
-			let abs_line_info = u32_parser().repeated().exactly(interval);
+			let line_info = u8_parser().ignored().repeated().exactly(len);
+			let abs_line_info = u32_parser().ignored().repeated().exactly(interval);
 
 			line_info.then(abs_line_info)
 		})
@@ -142,7 +142,9 @@ fn debug_info_parser(len: usize) -> impl Parser<()> {
 	let upv_info = list_of_parser(any_size_parser());
 
 	let line_present = just(0).ignored().or(u8_parser().then(line_info).ignored());
-	let var_present = just(0).ignored().or(loc_info.then(upv_info).ignored());
+	let var_present = just(0)
+		.ignored()
+		.or(u8_parser().then(loc_info).then(upv_info).ignored());
 
 	line_present.then(var_present).ignored()
 }
@@ -164,14 +166,14 @@ fn function_parser() -> impl Parser<Function> {
 	let constant_list = list_of_parser(constant_parser());
 	let reference_list = list_of_parser(any_size_parser());
 
-	let debug_name = any_size_parser();
 	let line_defined = any_size_parser();
+	let debug_name = any_size_parser();
 
 	meta.ignore_then(code_list)
 		.then(constant_list)
 		.then(reference_list)
-		.then_ignore(debug_name)
 		.then_ignore(line_defined)
+		.then_ignore(debug_name)
 		.map_with_span(to_function)
 		.then_with(read_remaining)
 }
@@ -185,12 +187,12 @@ fn module_parser() -> impl Parser<Module> {
 
 	let version = just(LUAU_VERSION);
 	let string_list = list_of_parser(string_parser());
-	let proto_list = list_of_parser(function_parser());
+	let function_list = list_of_parser(function_parser());
 	let entry_point = any_size_parser();
 
 	version
 		.ignore_then(string_list)
-		.then(proto_list)
+		.then(function_list)
 		.then(entry_point)
 		.map(to_module)
 }
