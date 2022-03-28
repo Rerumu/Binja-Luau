@@ -152,8 +152,8 @@ impl Opcode {
 			| Self::SetList
 			| Self::ForGenericLoop
 			| Self::LoadConstantEx
-			| Self::JumpIfTruthy
-			| Self::JumpIfFalsy
+			| Self::JumpIfConstant
+			| Self::JumpIfNotConstant
 			| Self::FastCall2
 			| Self::FastCall2K => 8,
 			_ => 4,
@@ -265,7 +265,7 @@ impl Opcode {
 			Self::SetTableKey => &[A, B, X],
 			Self::GetTableIndex => &[A, B, C],
 			Self::SetTableIndex => &[A, B, C],
-			Self::NewClosure => &[A, B],
+			Self::NewClosure => &[A, D],
 			Self::NameCall => &[A, B, X],
 			Self::Call => &[A, B, C],
 			Self::Return => &[A, B],
@@ -300,7 +300,7 @@ impl Opcode {
 			Self::Minus => &[A, B],
 			Self::Length => &[A, B],
 			Self::NewTable => &[A, B, X],
-			Self::DupTable => &[A, X],
+			Self::DupTable => &[A, D],
 			Self::SetList => &[A, B, C, X],
 			Self::ForNumericPrep => &[A, D],
 			Self::ForNumericLoop => &[A, D],
