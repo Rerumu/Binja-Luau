@@ -2,8 +2,8 @@ use std::ops::Range;
 
 use binaryninja::architecture::{InstructionTextToken, InstructionTextTokenContents};
 
-use crate::instruction::{
-	builtin::BuiltIn, decoder::get_jump_target, import::Import, opcode::Opcode,
+use crate::decoder::{
+	inst::get_jump_target, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown,
 };
 
 #[derive(Default)]
@@ -90,7 +90,7 @@ impl TextBuilder {
 	}
 
 	pub fn add_built_in(&mut self, index: u8) {
-		let name = match BuiltIn::try_from(index).ok() {
+		let name = match RefKnown::try_from(index).ok() {
 			Some(v) => v.to_string(),
 			None => "unknown".to_string(),
 		};
@@ -106,7 +106,7 @@ impl TextBuilder {
 	}
 
 	pub fn add_import(&mut self, encoded: u32, list: &[Range<usize>]) {
-		for name in Import::new(encoded) {
+		for name in RefUnknown::from(encoded) {
 			self.add_constant(name, list);
 		}
 	}

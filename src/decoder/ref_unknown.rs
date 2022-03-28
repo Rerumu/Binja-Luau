@@ -1,13 +1,7 @@
 #[derive(Clone)]
-pub struct Import(u32);
+pub struct RefUnknown(u32);
 
-impl Import {
-	pub fn new(id: u32) -> Self {
-		Import(id)
-	}
-}
-
-impl Iterator for Import {
+impl Iterator for RefUnknown {
 	type Item = usize;
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -25,10 +19,16 @@ impl Iterator for Import {
 	}
 }
 
-impl ExactSizeIterator for Import {
+impl ExactSizeIterator for RefUnknown {
 	fn len(&self) -> usize {
 		let high = self.0 >> 30;
 
 		high.try_into().unwrap()
+	}
+}
+
+impl From<u32> for RefUnknown {
+	fn from(value: u32) -> Self {
+		Self(value)
 	}
 }

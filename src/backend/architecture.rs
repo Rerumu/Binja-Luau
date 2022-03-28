@@ -9,11 +9,11 @@ use binaryninja::{
 };
 
 use crate::{
-	file::view::MODULE,
-	instruction::{
-		decoder::{get_jump_target, Decoder},
+	decoder::{
+		inst::{get_jump_target, Inst},
 		opcode::{OpType, Opcode},
 	},
+	file::view::MODULE,
 };
 
 use super::{
@@ -78,7 +78,7 @@ impl BaseArchitecture for Architecture {
 	}
 
 	fn instruction_info(&self, data: &[u8], addr: u64) -> Option<InstructionInfo> {
-		let decoder = Decoder::try_from(data).ok()?;
+		let decoder = Inst::try_from(data).ok()?;
 		let mut info = InstructionInfo::new(decoder.op().len(), false);
 
 		match decoder.op() {
@@ -142,7 +142,7 @@ impl BaseArchitecture for Architecture {
 		data: &[u8],
 		addr: u64,
 	) -> Option<(usize, Self::InstructionTextContainer)> {
-		let decoder = Decoder::try_from(data).ok()?;
+		let decoder = Inst::try_from(data).ok()?;
 		let opcode = decoder.op();
 
 		let mut builder = TextBuilder::new();

@@ -1,8 +1,8 @@
 use super::opcode::{OpName, Opcode};
 
-pub struct Decoder<'a>(&'a [u8]);
+pub struct Inst<'a>(&'a [u8]);
 
-impl<'a> Decoder<'a> {
+impl<'a> Inst<'a> {
 	pub fn op(&self) -> Opcode {
 		Opcode::try_from(self.0[0]).unwrap()
 	}
@@ -52,7 +52,7 @@ impl<'a> Decoder<'a> {
 	}
 }
 
-impl<'a> TryFrom<&'a [u8]> for Decoder<'a> {
+impl<'a> TryFrom<&'a [u8]> for Inst<'a> {
 	type Error = ();
 
 	fn try_from(data: &'a [u8]) -> Result<Self, Self::Error> {
@@ -61,7 +61,7 @@ impl<'a> TryFrom<&'a [u8]> for Decoder<'a> {
 		if data.len() < len {
 			Err(())
 		} else {
-			Ok(Decoder(data))
+			Ok(Self(data))
 		}
 	}
 }
