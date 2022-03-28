@@ -2,8 +2,11 @@ use std::ops::Range;
 
 use binaryninja::architecture::{InstructionTextToken, InstructionTextTokenContents};
 
-use crate::decoder::{
-	inst::get_jump_target, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown,
+use crate::{
+	decoder::{
+		inst::get_jump_target, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown,
+	},
+	file::parser::Function,
 };
 
 #[derive(Default)]
@@ -100,6 +103,17 @@ impl TextBuilder {
 		self.buffer.push(wrap.clone());
 		self.buffer.push(token);
 		self.buffer.push(wrap);
+	}
+
+	pub fn add_function(&mut self, index: usize, list: &[Function]) {
+		let target = list.get(index).map_or(0, |v| v.code().start as u64);
+		let token = InstructionTextToken::new(
+			InstructionTextTokenContents::PossibleAddress(target),
+			format!("func_{index}"),
+		);
+
+		self.add_space();
+		self.buffer.push(token);
 	}
 
 	pub fn add_import(&mut self, encoded: u32, list: &[Range<usize>]) {
