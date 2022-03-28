@@ -9,6 +9,8 @@ use crate::{
 	file::parser::Function,
 };
 
+const MAX_INST_PADDING: usize = Opcode::PrepVariadic.mnemonic().len();
+
 #[derive(Default)]
 pub struct TextBuilder {
 	buffer: Vec<InstructionTextToken>,
@@ -37,6 +39,10 @@ impl TextBuilder {
 		let token = InstructionTextToken::new(InstructionTextTokenContents::Instruction, name);
 
 		self.buffer.push(token);
+
+		for _ in 0..MAX_INST_PADDING.saturating_sub(name.len()) {
+			self.add_space();
+		}
 	}
 
 	pub fn add_location(&mut self, addr: u64, offset: i64) {
