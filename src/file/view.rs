@@ -1,7 +1,7 @@
-use std::ops::Range;
+use std::{lazy::SyncLazy, ops::Range, sync::RwLock};
 
 use binaryninja::{
-	architecture::ArchitectureExt,
+	architecture::{ArchitectureExt, CoreArchitecture},
 	binaryview::{BinaryView, BinaryViewBase, BinaryViewExt, Result as BResult},
 	custombinaryview::{
 		BinaryViewType, BinaryViewTypeBase, CustomBinaryView, CustomBinaryViewType, CustomView,
@@ -13,18 +13,17 @@ use binaryninja::{
 	Endianness,
 };
 
-use crate::backend::architecture::Architecture;
-
 use super::parser::{parse, Module};
+
+pub static MODULE: SyncLazy<RwLock<Module>> = SyncLazy::new(RwLock::default);
 
 pub struct ViewType {
 	pub typ: BinaryViewType,
-	pub arch: &'static Architecture,
 }
 
 impl ViewType {
-	pub fn new(typ: BinaryViewType, arch: &'static Architecture) -> Self {
-		Self { typ, arch }
+	pub fn new(typ: BinaryViewType) -> Self {
+		Self { typ }
 	}
 }
 
@@ -48,7 +47,7 @@ impl CustomBinaryViewType for ViewType {
 	) -> BResult<CustomView<'builder>> {
 		let module = parse(data)?;
 
-		builder.create::<View>(data, (self.arch, module))
+		builder.create::<View>(data, module)
 	}
 }
 
@@ -81,7 +80,7 @@ fn to_range(old: Range<usize>) -> Range<u64> {
 }
 
 unsafe impl CustomBinaryView for View {
-	type Args = (&'static Architecture, Module);
+	type Args = Module;
 
 	fn new(handle: &BinaryView, _args: &Self::Args) -> BResult<Self> {
 		let view = handle.to_owned();
@@ -90,14 +89,13 @@ unsafe impl CustomBinaryView for View {
 	}
 
 	fn init(&self, args: Self::Args) -> BResult<()> {
-		let module = args.1;
-		let arch = args.0;
+		let arch = CoreArchitecture::by_name("luau").ok_or(())?;
 		let plat = arch.standalone_platform().ok_or(())?;
 
-		self.set_default_arch(arch);
+		self.set_default_arch(&arch);
 		self.set_default_platform(&plat);
 
-		let string_list = module.string_list();
+		let string_list = args.string_list();
 
 		if !string_list.is_empty() {
 			let range =
@@ -113,7 +111,7 @@ unsafe impl CustomBinaryView for View {
 			self.add_section(Section::new("string_list", range).semantics(Semantics::ReadOnlyData));
 		}
 
-		for (i, func) in module.function_list().iter().enumerate() {
+		for (i, func) in args.function_list().iter().enumerate() {
 			let code = to_range(func.code());
 			let position = to_range(func.position());
 
@@ -139,9 +137,9 @@ unsafe impl CustomBinaryView for View {
 			self.add_auto_function(&plat, code.start);
 		}
 
-		self.add_entry_point(&plat, module.entry_point());
+		self.add_entry_point(&plat, args.entry_point());
 
-		*arch.module.write().unwrap() = module;
+		*MODULE.write().unwrap() = args;
 
 		Ok(())
 	}

@@ -1,5 +1,3 @@
-use std::sync::RwLock;
-
 use binaryninja::{
 	architecture::{
 		Architecture as BaseArchitecture, BranchInfo, CoreArchitecture, CoreFlag, CoreFlagClass,
@@ -11,7 +9,7 @@ use binaryninja::{
 };
 
 use crate::{
-	file::parser::Module,
+	file::view::MODULE,
 	instruction::{
 		decoder::{get_jump_target, Decoder},
 		opcode::{OpType, Opcode},
@@ -26,16 +24,11 @@ use super::{
 pub struct Architecture {
 	pub handle: CustomArchitectureHandle<Self>,
 	pub core: CoreArchitecture,
-	pub module: RwLock<Module>,
 }
 
 impl Architecture {
 	pub fn new(handle: CustomArchitectureHandle<Self>, core: CoreArchitecture) -> Self {
-		Self {
-			handle,
-			core,
-			module: RwLock::default(),
-		}
+		Self { handle, core }
 	}
 }
 
