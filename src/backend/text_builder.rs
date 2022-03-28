@@ -83,10 +83,14 @@ impl TextBuilder {
 			None => "unknown".to_string(),
 		};
 
-		let token = InstructionTextToken::new(InstructionTextTokenContents::Instruction, name);
+		let token = InstructionTextToken::new(InstructionTextTokenContents::FloatingPoint, name);
+		let wrap =
+			InstructionTextToken::new(InstructionTextTokenContents::BeginMemoryOperand, "\"");
 
 		self.add_space();
+		self.buffer.push(wrap.clone());
 		self.buffer.push(token);
+		self.buffer.push(wrap);
 	}
 }
 
