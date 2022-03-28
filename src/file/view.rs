@@ -54,6 +54,10 @@ impl CustomBinaryViewType for Builder {
 	}
 }
 
+fn to_range_u64(old: Range<usize>) -> Range<u64> {
+	old.start as u64..old.end as u64
+}
+
 pub struct View {
 	view: Ref<BinaryView>,
 }
@@ -66,20 +70,21 @@ impl View {
 
 		let first = string_list.first().unwrap().start;
 		let last = string_list.last().unwrap().end;
-		let range = to_range(first..last);
+		let range = to_range_u64(first..last);
 
 		self.add_segment(
 			Segment::new(range.clone())
 				.parent_backing(range.clone())
 				.contains_data(true)
-				.readable(true),
+				.readable(true)
+				.is_auto(true),
 		);
 
 		self.add_section(Section::new("string_list", range).semantics(Semantics::ReadOnlyData));
 	}
 
-	fn add_function_segment(&self, index: usize, func: &Function) {
-		let position = to_range(func.position());
+	fn add_function_segment(&self, func: &Function) {
+		let position = to_range_u64(func.position());
 
 		self.add_segment(
 			Segment::new(position.clone())
@@ -87,12 +92,9 @@ impl View {
 				.contains_code(true)
 				.contains_data(true)
 				.readable(true)
-				.executable(true),
+				.executable(true)
+				.is_auto(true),
 		);
-
-		self.add_code_section(index, func.code());
-
-		self.add_constant_section(index, func.constant_list());
 	}
 
 	fn add_code_section(&self, index: usize, code: Range<usize>) {
@@ -100,10 +102,12 @@ impl View {
 			return;
 		}
 
-		let range = to_range(code);
+		let range = to_range_u64(code);
 
 		self.add_section(
-			Section::new(format!("code_{}", index), range).semantics(Semantics::ReadOnlyCode),
+			Section::new(format!("code_{index}"), range)
+				.semantics(Semantics::ReadOnlyCode)
+				.is_auto(true),
 		);
 	}
 
@@ -114,10 +118,12 @@ impl View {
 
 		let first = constant_list.first().unwrap().start;
 		let last = constant_list.last().unwrap().end;
-		let name = format!("data_{}", index);
+		let range = to_range_u64(first..last);
 
 		self.add_section(
-			Section::new(name, to_range(first..last)).semantics(Semantics::ReadOnlyData),
+			Section::new(format!("data_{index}"), range)
+				.semantics(Semantics::ReadOnlyData)
+				.is_auto(true),
 		);
 	}
 }
@@ -142,10 +148,6 @@ impl BinaryViewBase for View {
 	}
 }
 
-fn to_range(old: Range<usize>) -> Range<u64> {
-	old.start as u64..old.end as u64
-}
-
 unsafe impl CustomBinaryView for View {
 	type Args = Module;
 
@@ -165,9 +167,12 @@ unsafe impl CustomBinaryView for View {
 		self.add_string_section(args.string_list());
 
 		for (i, func) in args.function_list().iter().enumerate() {
-			let code = to_range(func.code());
+			let code = to_range_u64(func.code());
 
-			self.add_function_segment(i, func);
+			self.add_function_segment(func);
+
+			self.add_code_section(i, func.code());
+			self.add_constant_section(i, func.constant_list());
 
 			self.add_auto_function(&plat, code.start);
 		}
