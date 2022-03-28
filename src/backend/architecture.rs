@@ -154,9 +154,8 @@ impl BaseArchitecture for Architecture {
 
 			match typ {
 				OpType::Location => builder.add_location(addr, raw.into()),
-				OpType::Register => builder.add_register(raw),
+				OpType::Register => builder.add_register(raw.try_into().ok()?),
 				// OpType::UpValue => todo!(),
-				// OpType::Global => todo!(),
 				OpType::Boolean => builder.add_boolean(raw != 0),
 				OpType::Integer => builder.add_integer(raw),
 				OpType::Constant => {

@@ -13,7 +13,6 @@ pub enum OpType {
 	Location,
 	Register,
 	UpValue,
-	Global,
 	Boolean,
 	Integer,
 	Constant,
@@ -135,7 +134,7 @@ pub enum Opcode {
 }
 
 impl Opcode {
-	pub fn len(self) -> usize {
+	pub const fn len(self) -> usize {
 		match self {
 			Self::GetGlobal
 			| Self::SetGlobal
@@ -161,7 +160,7 @@ impl Opcode {
 		}
 	}
 
-	pub fn mnemonic(self) -> &'static str {
+	pub const fn mnemonic(self) -> &'static str {
 		match self {
 			Self::Nop => "nop",
 			Self::Break => "break",
@@ -243,7 +242,7 @@ impl Opcode {
 	}
 
 	#[allow(clippy::match_same_arms)]
-	fn name_list(self) -> &'static [OpName] {
+	const fn name_list(self) -> &'static [OpName] {
 		use OpName::{A, B, C, D, E, X};
 
 		match self {
@@ -327,10 +326,9 @@ impl Opcode {
 	}
 
 	#[allow(clippy::match_same_arms)]
-	fn type_list(self) -> &'static [OpType] {
+	const fn type_list(self) -> &'static [OpType] {
 		use OpType::{
-			Boolean, BuiltIn, Constant, Function, Global, Import, Integer, Location, Register,
-			UpValue,
+			Boolean, BuiltIn, Constant, Function, Import, Integer, Location, Register, UpValue,
 		};
 
 		match self {
@@ -341,8 +339,8 @@ impl Opcode {
 			Self::LoadInteger => &[Register, Integer],
 			Self::LoadConstant => &[Register, Constant],
 			Self::Move => &[Register, Register],
-			Self::GetGlobal => &[Register, Global],
-			Self::SetGlobal => &[Register, Global],
+			Self::GetGlobal => &[Register, Constant],
+			Self::SetGlobal => &[Register, Constant],
 			Self::GetUpValue => &[Register, UpValue],
 			Self::SetUpValue => &[Register, UpValue],
 			Self::CloseUpValues => &[Register],

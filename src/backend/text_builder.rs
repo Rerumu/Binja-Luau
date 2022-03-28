@@ -39,7 +39,7 @@ impl TextBuilder {
 	pub fn add_location(&mut self, addr: u64, offset: i64) {
 		let target = get_jump_target(addr, offset);
 		let token = InstructionTextToken::new(
-			InstructionTextTokenContents::PossibleAddress(target),
+			InstructionTextTokenContents::CodeRelativeAddress(target),
 			format!("{offset:+}"),
 		);
 
@@ -47,14 +47,9 @@ impl TextBuilder {
 		self.buffer.push(token);
 	}
 
-	pub fn add_register(&mut self, reg: i32) {
-		let name = if (0..0x100).contains(&reg) {
-			format!("r{}", reg)
-		} else {
-			"r?".to_string()
-		};
-
-		let token = InstructionTextToken::new(InstructionTextTokenContents::Register, name);
+	pub fn add_register(&mut self, reg: u8) {
+		let token =
+			InstructionTextToken::new(InstructionTextTokenContents::Register, format!("r{reg}"));
 
 		self.add_space();
 		self.buffer.push(token);
@@ -71,8 +66,10 @@ impl TextBuilder {
 	}
 
 	pub fn add_integer(&mut self, value: i32) {
-		let token =
-			InstructionTextToken::new(InstructionTextTokenContents::Integer(0), value.to_string());
+		let token = InstructionTextToken::new(
+			InstructionTextTokenContents::Integer(value as u64),
+			value.to_string(),
+		);
 
 		self.add_space();
 		self.buffer.push(token);
@@ -82,7 +79,7 @@ impl TextBuilder {
 		let target = list.get(index).map_or(0, |v| v.start as u64);
 		let token = InstructionTextToken::new(
 			InstructionTextTokenContents::PossibleAddress(target),
-			target.to_string(),
+			format!("kst_{index}"),
 		);
 
 		self.add_space();
