@@ -159,7 +159,7 @@ impl BaseArchitecture for Architecture {
 			match typ {
 				OpType::Location => builder.add_location(addr, raw.into()),
 				OpType::Register => builder.add_register(raw.try_into().ok()?),
-				// OpType::UpValue => todo!(),
+				OpType::UpValue => builder.add_upvalue(raw.try_into().ok()?),
 				OpType::Boolean => builder.add_boolean(raw != 0),
 				OpType::Integer => builder.add_integer(raw),
 				OpType::Constant => {
@@ -181,7 +181,6 @@ impl BaseArchitecture for Architecture {
 					builder.add_import(raw as u32, ref_list);
 				}
 				OpType::BuiltIn => builder.add_built_in(raw.try_into().ok()?),
-				_ => builder.add_failure(),
 			}
 		}
 

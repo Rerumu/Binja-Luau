@@ -27,13 +27,6 @@ impl TextBuilder {
 		self.buffer.push(token);
 	}
 
-	pub fn add_failure(&mut self) {
-		let token = InstructionTextToken::new(InstructionTextTokenContents::Text, "?");
-
-		self.add_space();
-		self.buffer.push(token);
-	}
-
 	pub fn add_mnemonic(&mut self, opcode: Opcode) {
 		let name = opcode.mnemonic();
 		let token = InstructionTextToken::new(InstructionTextTokenContents::Instruction, name);
@@ -59,6 +52,14 @@ impl TextBuilder {
 	pub fn add_register(&mut self, reg: u8) {
 		let token =
 			InstructionTextToken::new(InstructionTextTokenContents::Register, format!("r{reg}"));
+
+		self.add_space();
+		self.buffer.push(token);
+	}
+
+	pub fn add_upvalue(&mut self, upv: u8) {
+		let token =
+			InstructionTextToken::new(InstructionTextTokenContents::Register, format!("u{upv}"));
 
 		self.add_space();
 		self.buffer.push(token);
