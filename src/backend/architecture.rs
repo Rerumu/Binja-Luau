@@ -172,16 +172,11 @@ impl BaseArchitecture for Architecture {
 
 	fn instruction_llil(
 		&self,
-		data: &[u8],
+		_data: &[u8],
 		_addr: u64,
-		il: &mut Lifter<Self>,
+		_il: &mut Lifter<Self>,
 	) -> Option<(usize, bool)> {
-		let decoder = Decoder::try_from(data).ok()?;
-		let opcode = decoder.op();
-
-		il.unimplemented();
-
-		Some((opcode.len(), false))
+		None
 	}
 
 	fn flags_required_for_flag_condition(
