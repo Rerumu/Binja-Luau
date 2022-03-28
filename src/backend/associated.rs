@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use binaryninja::{
 	architecture::{Register as IRegister, RegisterInfo as IRegisterInfo},
 	binaryninjacore_sys::BNImplicitRegisterExtend,
+	llil::Register as LRegister,
 };
 
 pub struct RegisterInfo;
@@ -29,11 +30,11 @@ impl IRegisterInfo for RegisterInfo {
 
 #[derive(Clone, Copy)]
 pub struct Register {
-	id: u32,
+	id: u8,
 }
 
 impl Register {
-	pub fn new(id: u32) -> Self {
+	pub fn new(id: u8) -> Self {
 		Register { id }
 	}
 }
@@ -50,6 +51,12 @@ impl IRegister for Register {
 	}
 
 	fn id(&self) -> u32 {
-		self.id
+		self.id.into()
+	}
+}
+
+impl From<Register> for LRegister<Register> {
+	fn from(reg: Register) -> Self {
+		LRegister::ArchReg(reg)
 	}
 }

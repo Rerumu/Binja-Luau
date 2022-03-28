@@ -201,7 +201,7 @@ impl BaseArchitecture for Architecture {
 	}
 
 	fn registers_all(&self) -> Vec<Self::Register> {
-		(0..255).map(Register::new).collect()
+		(u8::MIN..=u8::MAX).map(Register::new).collect()
 	}
 
 	fn registers_full_width(&self) -> Vec<Self::Register> {
@@ -241,7 +241,7 @@ impl BaseArchitecture for Architecture {
 	}
 
 	fn register_from_id(&self, id: u32) -> Option<Self::Register> {
-		(id < 0x100).then(|| Register::new(id))
+		id.try_into().ok().map(Register::new)
 	}
 
 	fn flag_from_id(&self, _: u32) -> Option<Self::Flag> {
