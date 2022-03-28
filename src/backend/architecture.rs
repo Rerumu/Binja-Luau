@@ -168,10 +168,7 @@ impl BaseArchitecture for Architecture {
 					let module = MODULE.read().unwrap();
 					let ref_list = module.function_list();
 
-					let index = usize::try_from(raw).ok()?;
-					let adjusted = *module.by_code_address(addr)?.reference_list().get(index)?;
-
-					builder.add_function(adjusted, ref_list);
+					builder.add_function(raw.try_into().ok()?, ref_list);
 				}
 				OpType::Import => {
 					let module = MODULE.read().unwrap();
