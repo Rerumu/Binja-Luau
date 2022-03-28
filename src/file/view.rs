@@ -13,7 +13,7 @@ use binaryninja::{
 	Endianness,
 };
 
-use super::parser::{parse, Module};
+use super::parser::{parse, Function, Module};
 
 pub static MODULE: SyncLazy<RwLock<Module>> = SyncLazy::new(RwLock::default);
 
@@ -53,6 +53,70 @@ impl CustomBinaryViewType for ViewType {
 
 pub struct View {
 	view: Ref<BinaryView>,
+}
+
+impl View {
+	fn add_string_section(&self, string_list: &[Range<usize>]) {
+		if string_list.is_empty() {
+			return;
+		}
+
+		let first = string_list.first().unwrap().start;
+		let last = string_list.last().unwrap().end;
+		let range = to_range(first..last);
+
+		self.add_segment(
+			Segment::new(range.clone())
+				.parent_backing(range.clone())
+				.contains_data(true)
+				.readable(true),
+		);
+
+		self.add_section(Section::new("string_list", range).semantics(Semantics::ReadOnlyData));
+	}
+
+	fn add_function_segment(&self, index: usize, func: &Function) {
+		let position = to_range(func.position());
+
+		self.add_segment(
+			Segment::new(position.clone())
+				.parent_backing(position)
+				.contains_code(true)
+				.contains_data(true)
+				.readable(true)
+				.executable(true),
+		);
+
+		self.add_code_section(index, func.code());
+
+		self.add_constant_section(index, func.constant_list());
+	}
+
+	fn add_code_section(&self, index: usize, code: Range<usize>) {
+		if code.is_empty() {
+			return;
+		}
+
+		let range = to_range(code);
+
+		self.add_section(
+			Section::new(format!("code_{}", index), range).semantics(Semantics::ReadOnlyCode),
+		);
+	}
+
+	fn add_constant_section(&self, index: usize, constant_list: &[Range<usize>]) {
+		if constant_list.is_empty() {
+			return;
+		}
+
+		let first = constant_list.first().unwrap().start;
+		let last = constant_list.last().unwrap().end;
+		let name = format!("data_{}", index);
+
+		self.add_section(
+			Section::new(name, to_range(first..last)).semantics(Semantics::ReadOnlyData),
+		);
+	}
 }
 
 impl AsRef<BinaryView> for View {
@@ -95,44 +159,12 @@ unsafe impl CustomBinaryView for View {
 		self.set_default_arch(&arch);
 		self.set_default_platform(&plat);
 
-		let string_list = args.string_list();
-
-		if !string_list.is_empty() {
-			let range =
-				to_range(string_list.first().unwrap().start..string_list.last().unwrap().end);
-
-			self.add_segment(
-				Segment::new(range.clone())
-					.parent_backing(range.clone())
-					.contains_data(true)
-					.readable(true),
-			);
-
-			self.add_section(Section::new("string_list", range).semantics(Semantics::ReadOnlyData));
-		}
+		self.add_string_section(args.string_list());
 
 		for (i, func) in args.function_list().iter().enumerate() {
 			let code = to_range(func.code());
-			let position = to_range(func.position());
 
-			self.add_segment(
-				Segment::new(position.clone())
-					.parent_backing(position.clone())
-					.contains_code(true)
-					.contains_data(true)
-					.readable(true)
-					.executable(true),
-			);
-
-			self.add_section(
-				Section::new(format!("code_{}", i), code.clone())
-					.semantics(Semantics::ReadOnlyCode),
-			);
-
-			self.add_section(
-				Section::new(format!("data_{}", i), position.start..code.start)
-					.semantics(Semantics::ReadOnlyData),
-			);
+			self.add_function_segment(i, func);
 
 			self.add_auto_function(&plat, code.start);
 		}
