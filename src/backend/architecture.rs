@@ -81,7 +81,10 @@ impl BaseArchitecture for Architecture {
 		let decoder = Inst::try_from(data).ok()?;
 		let mut info = InstructionInfo::new(decoder.op().len(), false);
 
-		match decoder.op() {
+		let op = decoder.op();
+		let next = (op.len() / 4 - 1).try_into().ok()?;
+
+		match op {
 			Opcode::LoadBoolean => {
 				let target = get_jump_target(addr, decoder.c().into());
 
@@ -117,14 +120,14 @@ impl BaseArchitecture for Architecture {
 			| Opcode::ForGenericLoopNext
 			| Opcode::JumpIfConstant
 			| Opcode::JumpIfNotConstant => {
-				let on_false = get_jump_target(addr, 0);
+				let on_false = get_jump_target(addr, next);
 				let on_true = get_jump_target(addr, decoder.d().into());
 
 				info.add_branch(BranchInfo::False(on_false), None);
 				info.add_branch(BranchInfo::True(on_true), None);
 			}
 			Opcode::FastCall | Opcode::FastCall1 | Opcode::FastCall2 | Opcode::FastCall2K => {
-				let on_false = get_jump_target(addr, 0);
+				let on_false = get_jump_target(addr, next);
 				let on_true = get_jump_target(addr, (decoder.c() + 1).into());
 
 				info.add_branch(BranchInfo::Indirect, None);
