@@ -28,22 +28,21 @@ impl IRegisterInfo for RegisterInfo {
 	}
 }
 
+#[repr(u8)]
 #[derive(Clone, Copy)]
-pub struct Register {
-	id: u8,
-}
-
-impl Register {
-	pub fn new(id: u8) -> Self {
-		Register { id }
-	}
+pub enum Register {
+	Stack,
+	Return,
 }
 
 impl IRegister for Register {
 	type InfoType = RegisterInfo;
 
 	fn name(&self) -> Cow<str> {
-		format!("r{}", self.id).into()
+		match self {
+			Register::Stack => "stack_pointer".into(),
+			Register::Return => "return_pointer".into(),
+		}
 	}
 
 	fn info(&self) -> Self::InfoType {
@@ -51,12 +50,22 @@ impl IRegister for Register {
 	}
 
 	fn id(&self) -> u32 {
-		self.id.into()
+		*self as u32
 	}
 }
 
 impl From<Register> for LRegister<Register> {
 	fn from(reg: Register) -> Self {
 		LRegister::ArchReg(reg)
+	}
+}
+
+impl TryFrom<u8> for Register {
+	type Error = ();
+
+	fn try_from(other: u8) -> Result<Self, Self::Error> {
+		let ok = other <= Self::Return as u8;
+
+		ok.then(|| unsafe { std::mem::transmute(other) }).ok_or(())
 	}
 }

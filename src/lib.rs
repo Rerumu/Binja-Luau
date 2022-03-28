@@ -1,9 +1,12 @@
 #![feature(once_cell)]
 #![feature(trait_alias)]
 
-use binaryninja::{architecture::register_architecture, custombinaryview::register_view_type};
+use binaryninja::{
+	architecture::register_architecture, callingconvention::register_calling_convention,
+	custombinaryview::register_view_type,
+};
 
-use backend::architecture::Architecture;
+use backend::architecture::{Architecture, CallingConvention};
 use file::view::ViewType;
 
 mod backend;
@@ -12,7 +15,9 @@ mod file;
 
 #[no_mangle]
 pub extern "C" fn CorePluginInit() -> bool {
-	register_architecture("luau", Architecture::new);
+	let arch = register_architecture("luau", Architecture::new);
+
+	register_calling_convention(arch, "luau", CallingConvention);
 	register_view_type("Luau", "Roblox Luau", ViewType::new);
 
 	true

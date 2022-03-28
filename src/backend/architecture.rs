@@ -4,6 +4,7 @@ use binaryninja::{
 		CoreFlagGroup, CoreFlagWrite, CustomArchitectureHandle, InstructionInfo,
 	},
 	binaryninjacore_sys::BNLowLevelILFlagCondition,
+	callingconvention::CallingConventionBase,
 	llil::{LiftedExpr, Lifter},
 	Endianness,
 };
@@ -213,7 +214,10 @@ impl BaseArchitecture for Architecture {
 	}
 
 	fn registers_all(&self) -> Vec<Self::Register> {
-		(u8::MIN..=u8::MAX).map(Register::new).collect()
+		vec![
+			Register::Stack,  // lua stack pointer
+			Register::Return, // lua return pointer
+		]
 	}
 
 	fn registers_full_width(&self) -> Vec<Self::Register> {
@@ -245,15 +249,18 @@ impl BaseArchitecture for Architecture {
 	}
 
 	fn stack_pointer_reg(&self) -> Option<Self::Register> {
-		None
+		Some(Register::Stack)
 	}
 
 	fn link_reg(&self) -> Option<Self::Register> {
-		None
+		Some(Register::Return)
 	}
 
 	fn register_from_id(&self, id: u32) -> Option<Self::Register> {
-		id.try_into().ok().map(Register::new)
+		u8::try_from(id)
+			.map_err(|_| ())
+			.and_then(Register::try_from)
+			.ok()
 	}
 
 	fn flag_from_id(&self, _: u32) -> Option<Self::Flag> {
@@ -280,5 +287,67 @@ impl BaseArchitecture for Architecture {
 impl AsRef<CoreArchitecture> for Architecture {
 	fn as_ref(&self) -> &CoreArchitecture {
 		&self.core
+	}
+}
+
+pub struct CallingConvention;
+
+impl CallingConventionBase for CallingConvention {
+	type Arch = Architecture;
+
+	fn caller_saved_registers(&self) -> Vec<Register> {
+		Vec::new()
+	}
+
+	fn callee_saved_registers(&self) -> Vec<Register> {
+		Vec::new()
+	}
+
+	fn int_arg_registers(&self) -> Vec<Register> {
+		Vec::new()
+	}
+
+	fn float_arg_registers(&self) -> Vec<Register> {
+		Vec::new()
+	}
+
+	fn arg_registers_shared_index(&self) -> bool {
+		false
+	}
+
+	fn reserved_stack_space_for_arg_registers(&self) -> bool {
+		false
+	}
+
+	fn stack_adjusted_on_return(&self) -> bool {
+		false
+	}
+
+	fn is_eligible_for_heuristics(&self) -> bool {
+		true
+	}
+
+	fn return_int_reg(&self) -> Option<Register> {
+		None
+	}
+
+	fn return_hi_int_reg(&self) -> Option<Register> {
+		None
+	}
+
+	fn return_float_reg(&self) -> Option<Register> {
+		None
+	}
+
+	fn global_pointer_reg(&self) -> Option<Register> {
+		None
+	}
+
+	fn implicitly_defined_registers(&self) -> Vec<Register> {
+		Vec::new()
+	}
+
+	fn are_argument_registers_used_for_var_args(&self) -> bool {
+		false
 	}
 }
