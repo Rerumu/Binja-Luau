@@ -20,29 +20,29 @@ use super::{
 
 pub static MODULE: SyncLazy<RwLock<Module>> = SyncLazy::new(RwLock::default);
 
-pub struct ViewType {
+pub struct Builder {
 	pub typ: BinaryViewType,
 }
 
-impl ViewType {
+impl Builder {
 	pub fn new(typ: BinaryViewType) -> Self {
 		Self { typ }
 	}
 }
 
-impl AsRef<BinaryViewType> for ViewType {
+impl AsRef<BinaryViewType> for Builder {
 	fn as_ref(&self) -> &BinaryViewType {
 		&self.typ
 	}
 }
 
-impl BinaryViewTypeBase for ViewType {
+impl BinaryViewTypeBase for Builder {
 	fn is_valid_for(&self, data: &BinaryView) -> bool {
 		parse(data).is_ok()
 	}
 }
 
-impl CustomBinaryViewType for ViewType {
+impl CustomBinaryViewType for Builder {
 	fn create_custom_view<'builder>(
 		&self,
 		data: &BinaryView,

@@ -7,7 +7,7 @@ use binaryninja::{
 };
 
 use backend::architecture::{Architecture, CallingConvention};
-use file::view::ViewType;
+use file::view::Builder;
 
 mod backend;
 mod decoder;
@@ -18,7 +18,7 @@ pub extern "C" fn CorePluginInit() -> bool {
 	let arch = register_architecture("luau", Architecture::new);
 
 	register_calling_convention(arch, "luau", CallingConvention);
-	register_view_type("Luau", "Roblox Luau", ViewType::new);
+	register_view_type("Luau", "Roblox Luau", Builder::new);
 
 	true
 }
