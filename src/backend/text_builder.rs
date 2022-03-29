@@ -76,10 +76,8 @@ impl TextBuilder {
 	}
 
 	pub fn add_integer(&mut self, value: i32) {
-		let token = InstructionTextToken::new(
-			InstructionTextTokenContents::Integer(value as u64),
-			value.to_string(),
-		);
+		let token =
+			InstructionTextToken::new(InstructionTextTokenContents::Integer(0), value.to_string());
 
 		self.add_space();
 		self.buffer.push(token);

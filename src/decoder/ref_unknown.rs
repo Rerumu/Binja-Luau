@@ -5,7 +5,7 @@ impl Iterator for RefUnknown {
 	type Item = usize;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let len = self.len();
+		let len = u32::try_from(self.len()).ok()?;
 
 		if len == 0 {
 			return None;
@@ -13,7 +13,7 @@ impl Iterator for RefUnknown {
 
 		let value = self.0 & 0x3FF;
 
-		self.0 = self.0 >> 10 | (len as u32 - 1) << 30;
+		self.0 = self.0 >> 10 | (len - 1) << 30;
 
 		Some(value.try_into().unwrap())
 	}

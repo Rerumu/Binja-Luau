@@ -1,3 +1,4 @@
+#![feature(mixed_integer_ops)]
 #![feature(once_cell)]
 #![feature(trait_alias)]
 

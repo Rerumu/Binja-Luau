@@ -68,7 +68,5 @@ impl<'a> TryFrom<&'a [u8]> for Inst<'a> {
 }
 
 pub fn get_jump_target(addr: u64, offset: i64) -> u64 {
-	let new = addr as i64 + offset * 4 + 4;
-
-	new as u64
+	addr.wrapping_add_signed(offset * 4) + 4
 }
