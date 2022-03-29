@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 pub type Range = std::ops::Range<usize>;
 
 #[derive(Clone)]
@@ -47,6 +49,16 @@ pub struct Module {
 	start_id: usize,
 }
 
+fn cmp_range_to_usize(range: Range, value: usize) -> Ordering {
+	if range.start > value {
+		Ordering::Greater
+	} else if range.end <= value {
+		Ordering::Less
+	} else {
+		Ordering::Equal
+	}
+}
+
 impl Module {
 	pub fn new(function_list: Box<[Function]>, string_list: Box<[Range]>, start_id: usize) -> Self {
 		Self {
@@ -70,11 +82,13 @@ impl Module {
 		func.code().start as u64
 	}
 
-	pub fn by_code_address(&self, addr: u64) -> Option<&Function> {
+	pub fn by_address(&self, addr: u64) -> Option<&Function> {
+		let func_list = self.function_list();
 		let addr = addr as usize;
 
-		self.function_list()
-			.iter()
-			.find(|func| func.code().contains(&addr))
+		func_list
+			.binary_search_by(|v| cmp_range_to_usize(v.position(), addr))
+			.map(|v| &func_list[v])
+			.ok()
 	}
 }
