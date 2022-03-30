@@ -57,7 +57,7 @@ impl<'a> TryFrom<&'a [u8]> for Inst<'a> {
 
 	fn try_from(data: &'a [u8]) -> Result<Self, Self::Error> {
 		let first = *data.get(0).ok_or(())?;
-		let len = Opcode::try_from(first)?.len();
+		let len = Opcode::try_from(first).map_err(drop)?.len();
 
 		if data.len() < len {
 			Err(())

@@ -257,9 +257,8 @@ impl BaseArchitecture for Architecture {
 
 	fn register_from_id(&self, id: u32) -> Option<Self::Register> {
 		u8::try_from(id)
-			.map_err(|_| ())
-			.and_then(Register::try_from)
 			.ok()
+			.and_then(|v| Register::try_from(v).ok())
 	}
 
 	fn flag_from_id(&self, _: u32) -> Option<Self::Flag> {

@@ -5,6 +5,7 @@ use binaryninja::{
 	binaryninjacore_sys::BNImplicitRegisterExtend,
 	llil::Register as LRegister,
 };
+use num_enum::TryFromPrimitive;
 
 pub struct RegisterInfo;
 
@@ -29,7 +30,7 @@ impl IRegisterInfo for RegisterInfo {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(TryFromPrimitive, Clone, Copy)]
 pub enum Register {
 	Stack,
 	Return,
@@ -57,15 +58,5 @@ impl IRegister for Register {
 impl From<Register> for LRegister<Register> {
 	fn from(reg: Register) -> Self {
 		LRegister::ArchReg(reg)
-	}
-}
-
-impl TryFrom<u8> for Register {
-	type Error = ();
-
-	fn try_from(other: u8) -> Result<Self, Self::Error> {
-		let ok = other <= Self::Return as u8;
-
-		ok.then(|| unsafe { std::mem::transmute(other) }).ok_or(())
 	}
 }

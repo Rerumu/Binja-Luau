@@ -1,6 +1,7 @@
-#[allow(dead_code)]
+use num_enum::TryFromPrimitive;
+
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(TryFromPrimitive, Clone, Copy)]
 pub enum RefKnown {
 	Assert = 1,
 
@@ -134,16 +135,6 @@ impl RefKnown {
 			RefKnown::Countrz => "bit32.countrz",
 			RefKnown::Select => "select",
 		}
-	}
-}
-
-impl TryFrom<u8> for RefKnown {
-	type Error = ();
-
-	fn try_from(other: u8) -> Result<Self, Self::Error> {
-		let ok = other <= Self::Select as u8;
-
-		ok.then(|| unsafe { std::mem::transmute(other) }).ok_or(())
 	}
 }
 

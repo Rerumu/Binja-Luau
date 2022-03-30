@@ -1,3 +1,5 @@
+use num_enum::TryFromPrimitive;
+
 #[derive(Clone, Copy)]
 pub enum OpName {
 	A,
@@ -21,9 +23,8 @@ pub enum OpType {
 	BuiltIn,
 }
 
-#[allow(dead_code)]
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(TryFromPrimitive, Clone, Copy)]
 pub enum Opcode {
 	Nop = 0,
 	Break,
@@ -416,15 +417,5 @@ impl Opcode {
 			.iter()
 			.copied()
 			.zip(self.type_list().iter().copied())
-	}
-}
-
-impl TryFrom<u8> for Opcode {
-	type Error = ();
-
-	fn try_from(other: u8) -> Result<Self, Self::Error> {
-		let ok = other <= Self::FastCall2K as u8;
-
-		ok.then(|| unsafe { std::mem::transmute(other) }).ok_or(())
 	}
 }
