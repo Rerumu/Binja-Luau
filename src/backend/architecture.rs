@@ -31,59 +31,13 @@ impl Architecture {
 	pub fn new(handle: CustomArchitectureHandle<Self>, core: CoreArchitecture) -> Self {
 		Self { handle, core }
 	}
-}
 
-impl BaseArchitecture for Architecture {
-	type Handle = CustomArchitectureHandle<Self>;
-
-	type RegisterInfo = RegisterInfo;
-
-	type Register = Register;
-
-	type Flag = CoreFlag;
-
-	type FlagWrite = CoreFlagWrite;
-
-	type FlagClass = CoreFlagClass;
-
-	type FlagGroup = CoreFlagGroup;
-
-	type InstructionTextContainer = TextBuilder;
-
-	fn endianness(&self) -> Endianness {
-		Endianness::LittleEndian
-	}
-
-	fn address_size(&self) -> usize {
-		8
-	}
-
-	fn default_integer_size(&self) -> usize {
-		8
-	}
-
-	fn instruction_alignment(&self) -> usize {
-		1
-	}
-
-	fn max_instr_len(&self) -> usize {
-		8
-	}
-
-	fn opcode_display_len(&self) -> usize {
-		self.max_instr_len()
-	}
-
-	fn associated_arch_by_addr(&self, _: &mut u64) -> CoreArchitecture {
-		self.core
-	}
-
-	fn instruction_info(&self, data: &[u8], addr: u64) -> Option<InstructionInfo> {
-		let decoder = Inst::try_from(data).ok()?;
-		let mut info = InstructionInfo::new(decoder.op().len(), false);
-
+	// Technically can never fail
+	fn get_opt_instruction_info(decoder: Inst, addr: u64) -> Option<InstructionInfo> {
 		let op = decoder.op();
 		let next = (op.len() / 4 - 1).try_into().ok()?;
+
+		let mut info = InstructionInfo::new(op.len(), false);
 
 		match op {
 			Opcode::LoadBoolean => {
@@ -141,12 +95,7 @@ impl BaseArchitecture for Architecture {
 		Some(info)
 	}
 
-	fn instruction_text(
-		&self,
-		data: &[u8],
-		addr: u64,
-	) -> Option<(usize, Self::InstructionTextContainer)> {
-		let decoder = Inst::try_from(data).ok()?;
+	fn get_opt_instruction_text(decoder: Inst, addr: u64) -> Option<TextBuilder> {
 		let opcode = decoder.op();
 
 		let mut builder = TextBuilder::new();
@@ -186,7 +135,70 @@ impl BaseArchitecture for Architecture {
 			}
 		}
 
-		Some((opcode.len(), builder))
+		Some(builder)
+	}
+}
+
+impl BaseArchitecture for Architecture {
+	type Handle = CustomArchitectureHandle<Self>;
+
+	type RegisterInfo = RegisterInfo;
+
+	type Register = Register;
+
+	type Flag = CoreFlag;
+
+	type FlagWrite = CoreFlagWrite;
+
+	type FlagClass = CoreFlagClass;
+
+	type FlagGroup = CoreFlagGroup;
+
+	type InstructionTextContainer = TextBuilder;
+
+	fn endianness(&self) -> Endianness {
+		Endianness::LittleEndian
+	}
+
+	fn address_size(&self) -> usize {
+		8
+	}
+
+	fn default_integer_size(&self) -> usize {
+		8
+	}
+
+	fn instruction_alignment(&self) -> usize {
+		1
+	}
+
+	fn max_instr_len(&self) -> usize {
+		8
+	}
+
+	fn opcode_display_len(&self) -> usize {
+		self.max_instr_len()
+	}
+
+	fn associated_arch_by_addr(&self, _: &mut u64) -> CoreArchitecture {
+		self.core
+	}
+
+	fn instruction_info(&self, data: &[u8], addr: u64) -> Option<InstructionInfo> {
+		let decoder = Inst::try_from(data).ok()?;
+
+		Self::get_opt_instruction_info(decoder, addr)
+	}
+
+	fn instruction_text(
+		&self,
+		data: &[u8],
+		addr: u64,
+	) -> Option<(usize, Self::InstructionTextContainer)> {
+		let decoder = Inst::try_from(data).ok()?;
+		let builder = Self::get_opt_instruction_text(decoder, addr)?;
+
+		Some((decoder.op().len(), builder))
 	}
 
 	fn instruction_llil(

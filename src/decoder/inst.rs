@@ -1,5 +1,6 @@
 use super::opcode::{OpName, Opcode};
 
+#[derive(Clone, Copy)]
 pub struct Inst<'a>(&'a [u8]);
 
 impl<'a> Inst<'a> {
