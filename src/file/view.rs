@@ -63,14 +63,12 @@ pub struct View {
 }
 
 impl View {
-	fn add_string_section(&self, string_list: &[Range<usize>]) {
-		if string_list.is_empty() {
+	fn add_string_section(&self, range: Range<usize>) {
+		if range.is_empty() {
 			return;
 		}
 
-		let first = string_list.first().unwrap().start;
-		let last = string_list.last().unwrap().end;
-		let range = to_range_u64(first..last);
+		let range = to_range_u64(range);
 
 		self.add_segment(
 			Segment::new(range.clone())
@@ -111,14 +109,12 @@ impl View {
 		);
 	}
 
-	fn add_constant_section(&self, index: usize, constant_list: &[Range<usize>]) {
-		if constant_list.is_empty() {
+	fn add_constant_section(&self, index: usize, constant: Range<usize>) {
+		if constant.is_empty() {
 			return;
 		}
 
-		let first = constant_list.first().unwrap().start;
-		let last = constant_list.last().unwrap().end;
-		let range = to_range_u64(first..last);
+		let range = to_range_u64(constant);
 
 		self.add_section(
 			Section::new(format!("data_{index}"), range)
@@ -164,17 +160,19 @@ unsafe impl CustomBinaryView for View {
 		self.set_default_arch(&arch);
 		self.set_default_platform(&plat);
 
-		self.add_string_section(args.string_list());
+		let str_range = args.string_list().range.clone();
 
-		for (i, func) in args.function_list().iter().enumerate() {
-			let code = to_range_u64(func.code());
+		self.add_string_section(str_range);
+
+		for (i, func) in args.function_list().data.iter().enumerate() {
+			let constant = func.constant_list().range.clone();
 
 			self.add_function_segment(func);
 
 			self.add_code_section(i, func.code());
-			self.add_constant_section(i, func.constant_list());
+			self.add_constant_section(i, constant);
 
-			self.add_auto_function(&plat, code.start);
+			self.add_auto_function(&plat, func.code().start as u64);
 		}
 
 		self.add_entry_point(&plat, args.entry_point());

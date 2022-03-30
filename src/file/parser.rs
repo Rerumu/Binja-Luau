@@ -6,7 +6,7 @@ use std::{
 use binaryninja::binaryview::{BinaryView, BinaryViewBase, BinaryViewExt};
 use num_enum::TryFromPrimitive;
 
-use super::data::{Function, Module};
+use super::data::{Function, List, Module};
 
 type PResult<T> = std::io::Result<T>;
 type Stream<'a> = Cursor<&'a [u8]>;
@@ -69,13 +69,24 @@ fn parse_any_size(s: &mut Stream) -> PResult<usize> {
 	Ok(result)
 }
 
-fn parse_list_of<P, O>(s: &mut Stream, parse: P) -> PResult<Box<[O]>>
+fn parse_list_of<P, O>(s: &mut Stream, parse: P) -> PResult<List<O>>
 where
 	P: Fn(&mut Stream) -> PResult<O>,
 {
+	let start = position_of(s);
 	let len = parse_any_size(s)?;
+	let mut temp = Vec::with_capacity(len);
 
-	(0..len).map(|_| parse(s)).collect()
+	for _ in 0..len {
+		temp.push(parse(s)?);
+	}
+
+	let end = position_of(s);
+
+	Ok(List {
+		data: temp.into(),
+		range: start..end,
+	})
 }
 
 fn parse_list_ignored<P, O>(s: &mut Stream, parse: P) -> PResult<()>
@@ -89,10 +100,11 @@ where
 	Ok(())
 }
 
-fn parse_string(s: &mut Stream) -> PResult<Range<usize>> {
+fn parse_string_data(s: &mut Stream) -> PResult<Range<usize>> {
+	let len = parse_any_size(s)?;
 	let start = position_of(s);
 
-	for _ in 0..parse_any_size(s)? {
+	for _ in 0..len {
 		parse_u8(s)?;
 	}
 
@@ -220,7 +232,7 @@ fn parse_module(s: &mut Stream) -> PResult<Module> {
 		return Err(Error::new(ErrorKind::InvalidData, "Invalid module version"));
 	}
 
-	let string_list = parse_list_of(s, parse_string)?;
+	let string_list = parse_list_of(s, parse_string_data)?;
 	let function_list = parse_list_of(s, parse_function)?;
 	let entry_point = parse_any_size(s)?;
 

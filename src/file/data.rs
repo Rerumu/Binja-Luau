@@ -2,20 +2,26 @@ use std::cmp::Ordering;
 
 pub type Range = std::ops::Range<usize>;
 
-#[derive(Clone)]
+#[derive(Default)]
+pub struct List<T> {
+	pub data: Box<[T]>,
+	pub range: Range,
+}
+
+#[derive(Default)]
 pub struct Function {
 	position: Range,
 	code: Range,
-	constant_list: Box<[Range]>,
-	reference_list: Box<[usize]>,
+	constant_list: List<Range>,
+	reference_list: List<usize>,
 }
 
 impl Function {
 	pub fn new(
 		position: Range,
 		code: Range,
-		constant_list: Box<[Range]>,
-		reference_list: Box<[usize]>,
+		constant_list: List<Range>,
+		reference_list: List<usize>,
 	) -> Self {
 		Self {
 			position,
@@ -33,19 +39,19 @@ impl Function {
 		self.code.clone()
 	}
 
-	pub fn constant_list(&self) -> &[Range] {
+	pub fn constant_list(&self) -> &List<Range> {
 		&self.constant_list
 	}
 
-	pub fn reference_list(&self) -> &[usize] {
+	pub fn reference_list(&self) -> &List<usize> {
 		&self.reference_list
 	}
 }
 
 #[derive(Default)]
 pub struct Module {
-	function_list: Box<[Function]>,
-	string_list: Box<[Range]>,
+	function_list: List<Function>,
+	string_list: List<Range>,
 	start_id: usize,
 }
 
@@ -60,7 +66,7 @@ fn cmp_range_to_usize(range: Range, value: usize) -> Ordering {
 }
 
 impl Module {
-	pub fn new(function_list: Box<[Function]>, string_list: Box<[Range]>, start_id: usize) -> Self {
+	pub fn new(function_list: List<Function>, string_list: List<Range>, start_id: usize) -> Self {
 		Self {
 			function_list,
 			string_list,
@@ -68,22 +74,22 @@ impl Module {
 		}
 	}
 
-	pub fn function_list(&self) -> &[Function] {
+	pub fn function_list(&self) -> &List<Function> {
 		&self.function_list
 	}
 
-	pub fn string_list(&self) -> &[Range] {
+	pub fn string_list(&self) -> &List<Range> {
 		&self.string_list
 	}
 
 	pub fn entry_point(&self) -> u64 {
-		let func = &self.function_list()[self.start_id];
+		let func = &self.function_list().data[self.start_id];
 
 		func.code().start as u64
 	}
 
 	pub fn by_address(&self, addr: u64) -> Option<&Function> {
-		let func_list = self.function_list();
+		let func_list = &self.function_list().data;
 		let addr = addr as usize;
 
 		func_list
