@@ -1,13 +1,20 @@
+use std::{
+	io::{Cursor, Error, ErrorKind, Read},
+	ops::Range,
+};
+
 use binaryninja::binaryview::{BinaryView, BinaryViewBase, BinaryViewExt};
-use chumsky::prelude::{choice, filter, just};
+use num_enum::TryFromPrimitive;
 
-use super::data::{Function, Module, Range};
+use super::data::{Function, Module};
 
-trait Parser<O> = chumsky::Parser<u8, O, Error = chumsky::error::Cheap<u8>> + Clone;
+type PResult<T> = std::io::Result<T>;
+type Stream<'a> = Cursor<&'a [u8]>;
 
 const LUAU_VERSION: u8 = 2;
 
 #[repr(u8)]
+#[derive(TryFromPrimitive)]
 enum TypeConstant {
 	Nil = 0,
 	Boolean,
@@ -18,183 +25,206 @@ enum TypeConstant {
 	Closure,
 }
 
-fn u8_parser() -> impl Parser<u8> {
-	chumsky::prelude::any()
+fn position_of(stream: &Stream) -> usize {
+	stream.position().try_into().expect("Position out of range")
 }
 
-fn u32_parser() -> impl Parser<()> {
-	u8_parser().ignored().repeated().exactly(4).ignored()
+fn parse_u8(s: &mut Stream) -> PResult<u8> {
+	let mut buf = [0_u8; 1];
+
+	s.read_exact(&mut buf)?;
+
+	Ok(buf[0])
 }
 
-fn u64_parser() -> impl Parser<()> {
-	u8_parser().ignored().repeated().exactly(8).ignored()
+fn parse_u32(s: &mut Stream) -> PResult<u32> {
+	let mut buf = [0_u8; 4];
+
+	s.read_exact(&mut buf)?;
+
+	Ok(u32::from_le_bytes(buf))
 }
 
-fn any_size_parser() -> impl Parser<usize> {
-	fn to_integer(data: (Vec<u8>, u8)) -> usize {
-		let head = data.0.into_iter();
-		let tail = std::iter::once(data.1);
+fn parse_u64(s: &mut Stream) -> PResult<u64> {
+	let mut buf = [0_u8; 8];
 
-		head.chain(tail)
-			.map(usize::from)
-			.enumerate()
-			.fold(0, |acc, (i, v)| acc | (v & 0x7F) << (i * 7))
+	s.read_exact(&mut buf)?;
+
+	Ok(u64::from_le_bytes(buf))
+}
+
+fn parse_any_size(s: &mut Stream) -> PResult<usize> {
+	let mut result = 0;
+
+	for i in 0.. {
+		let v = parse_u8(s)? as usize;
+
+		result |= (v & 0x7F) << (i * 7);
+
+		if v & 0x80 == 0 {
+			break;
+		}
 	}
 
-	filter(|v| v & 0x80 != 0)
-		.repeated()
-		.then(u8_parser())
-		.map(to_integer)
+	Ok(result)
 }
 
-fn list_of_parser<P, O>(parser: P) -> impl Parser<Vec<O>>
+fn parse_list_of<P, O>(s: &mut Stream, parse: P) -> PResult<Box<[O]>>
 where
-	P: Parser<O>,
+	P: Fn(&mut Stream) -> PResult<O>,
 {
-	let repeated = parser.repeated();
+	let len = parse_any_size(s)?;
 
-	any_size_parser().then_with(move |n| repeated.clone().exactly(n))
+	(0..len).map(|_| parse(s)).collect()
 }
 
-fn string_parser() -> impl Parser<Range> {
-	list_of_parser(u8_parser().ignored()).map_with_span(|_, s| s)
-}
-
-fn meta_parser() -> impl Parser<()> {
-	let max_stack_size = u8_parser();
-	let num_param = u8_parser();
-	let num_upval = u8_parser();
-	let is_vararg = u8_parser();
-
-	max_stack_size
-		.then(num_param)
-		.then(num_upval)
-		.then(is_vararg)
-		.ignored()
-}
-
-fn code_parser() -> impl Parser<Range> {
-	any_size_parser().then_with(|n| {
-		u32_parser()
-			.ignored()
-			.repeated()
-			.exactly(n)
-			.map_with_span(|_, s| s)
-	})
-}
-
-fn constant_parser() -> impl Parser<Range> {
-	let nil = just(TypeConstant::Nil as u8).ignored();
-
-	let boolean = just(TypeConstant::Boolean as u8)
-		.then(u8_parser())
-		.ignored();
-
-	let number = just(TypeConstant::Number as u8)
-		.then(u64_parser())
-		.ignored();
-
-	let string = just(TypeConstant::String as u8)
-		.then(any_size_parser())
-		.ignored();
-
-	let import = just(TypeConstant::Import as u8)
-		.then(u32_parser())
-		.ignored();
-
-	let table = just(TypeConstant::Table as u8)
-		.then(list_of_parser(any_size_parser().ignored()))
-		.ignored();
-
-	let closure = just(TypeConstant::Closure as u8)
-		.then(any_size_parser())
-		.ignored();
-
-	choice((nil, boolean, number, string, import, table, closure)).map_with_span(|_, s| s)
-}
-
-fn line_info_parser(len: usize) -> impl Parser<()> {
-	let line_gap = u8_parser();
-
-	line_gap
-		.then_with(move |g| {
-			let interval = ((len - 1) >> g) + 1;
-			let line_info = u8_parser().ignored().repeated().exactly(len);
-			let abs_line_info = u32_parser().ignored().repeated().exactly(interval);
-
-			line_info.then(abs_line_info)
-		})
-		.ignored()
-}
-
-fn loc_info_parser() -> impl Parser<()> {
-	let name = any_size_parser();
-	let start_pc = any_size_parser();
-	let end_pc = any_size_parser();
-	let reg = u8_parser();
-
-	name.then(start_pc).then(end_pc).then(reg).ignored()
-}
-
-fn debug_info_parser(len: usize) -> impl Parser<()> {
-	let line_info = line_info_parser(len);
-	let loc_info = list_of_parser(loc_info_parser());
-	let upv_info = list_of_parser(any_size_parser());
-
-	let line_present = just(0).ignored().or(u8_parser().then(line_info).ignored());
-	let var_present = just(0)
-		.ignored()
-		.or(u8_parser().then(loc_info).then(upv_info).ignored());
-
-	line_present.then(var_present).ignored()
-}
-
-fn function_parser() -> impl Parser<Function> {
-	type Data = ((Range, Vec<Range>), Vec<usize>);
-
-	fn to_function(data: Data, position: Range) -> Function {
-		Function::new(position, data.0 .0, data.0 .1.into(), data.1.into())
+fn parse_list_ignored<P, O>(s: &mut Stream, parse: P) -> PResult<()>
+where
+	P: Fn(&mut Stream) -> PResult<O>,
+{
+	for _ in 0..parse_any_size(s)? {
+		parse(s)?;
 	}
 
-	fn read_remaining(func: Function) -> impl Parser<Function> {
-		debug_info_parser(func.code().len() / 4).to(func)
-	}
-
-	let meta = meta_parser();
-
-	let code_list = code_parser();
-	let constant_list = list_of_parser(constant_parser());
-	let reference_list = list_of_parser(any_size_parser());
-
-	let line_defined = any_size_parser();
-	let debug_name = any_size_parser();
-
-	meta.ignore_then(code_list)
-		.then(constant_list)
-		.then(reference_list)
-		.then_ignore(line_defined)
-		.then_ignore(debug_name)
-		.map_with_span(to_function)
-		.then_with(read_remaining)
+	Ok(())
 }
 
-fn module_parser() -> impl Parser<Module> {
-	type Data = ((Vec<Range>, Vec<Function>), usize);
+fn parse_string(s: &mut Stream) -> PResult<Range<usize>> {
+	let start = position_of(s);
 
-	fn to_module(data: Data) -> Module {
-		Module::new(data.0 .1.into(), data.0 .0.into(), data.1)
+	for _ in 0..parse_any_size(s)? {
+		parse_u8(s)?;
 	}
 
-	let version = just(LUAU_VERSION);
-	let string_list = list_of_parser(string_parser());
-	let function_list = list_of_parser(function_parser());
-	let entry_point = any_size_parser();
+	Ok(start..position_of(s))
+}
 
-	version
-		.ignore_then(string_list)
-		.then(function_list)
-		.then(entry_point)
-		.map(to_module)
+fn parse_func_meta_data(s: &mut Stream) -> PResult<()> {
+	let _max_stack_size = parse_u8(s)?;
+	let _num_param = parse_u8(s)?;
+	let _num_upval = parse_u8(s)?;
+	let _is_vararg = parse_u8(s)?;
+
+	Ok(())
+}
+
+fn parse_code(s: &mut Stream) -> PResult<Range<usize>> {
+	let len = parse_any_size(s)?;
+	let start = position_of(s);
+
+	for _ in 0..len {
+		parse_u32(s)?;
+	}
+
+	Ok(start..position_of(s))
+}
+
+fn parse_constant(s: &mut Stream) -> PResult<Range<usize>> {
+	let start = position_of(s);
+	let tag = parse_u8(s)?
+		.try_into()
+		.map_err(|_| Error::new(ErrorKind::InvalidData, "Invalid constant tag"))?;
+
+	match tag {
+		TypeConstant::Nil => {}
+		TypeConstant::Boolean => {
+			parse_u8(s)?;
+		}
+		TypeConstant::Number => {
+			parse_u64(s)?;
+		}
+		TypeConstant::String | TypeConstant::Closure => {
+			parse_any_size(s)?;
+		}
+		TypeConstant::Import => {
+			parse_u32(s)?;
+		}
+		TypeConstant::Table => {
+			parse_list_ignored(s, parse_any_size)?;
+		}
+	}
+
+	let end = position_of(s);
+
+	Ok(start..end)
+}
+
+fn parse_line_info(len: usize, s: &mut Stream) -> PResult<()> {
+	let line_gap = parse_u8(s)?;
+	let interval = ((len - 1) >> line_gap) + 1;
+
+	for _ in 0..len {
+		parse_u8(s)?;
+	}
+
+	for _ in 0..interval {
+		parse_u32(s)?;
+	}
+
+	Ok(())
+}
+
+fn parse_local_info(s: &mut Stream) -> PResult<()> {
+	let _name = parse_any_size(s)?;
+	let _start_pc = parse_any_size(s)?;
+	let _end_pc = parse_any_size(s)?;
+	let _reg = parse_u8(s)?;
+
+	Ok(())
+}
+
+fn parse_debug_info(len: usize, s: &mut Stream) -> PResult<()> {
+	let has_line_info = parse_u8(s)? != 0;
+
+	if has_line_info {
+		parse_line_info(len, s)?;
+	}
+
+	let has_var_info = parse_u8(s)? != 0;
+
+	if has_var_info {
+		parse_list_ignored(s, parse_local_info)?;
+		parse_list_ignored(s, parse_any_size)?;
+	}
+
+	Ok(())
+}
+
+fn parse_function(s: &mut Stream) -> PResult<Function> {
+	let start = position_of(s);
+
+	parse_func_meta_data(s)?;
+
+	let code = parse_code(s)?;
+	let constant_list = parse_list_of(s, parse_constant)?;
+	let reference_list = parse_list_of(s, parse_any_size)?;
+	let _line_defined = parse_any_size(s)?;
+	let _debug_name = parse_any_size(s)?;
+
+	parse_debug_info(code.len() / 4, s)?;
+
+	let end = position_of(s);
+
+	Ok(Function::new(
+		start..end,
+		code,
+		constant_list,
+		reference_list,
+	))
+}
+
+fn parse_module(s: &mut Stream) -> PResult<Module> {
+	let version = parse_u8(s)?;
+
+	if version != LUAU_VERSION {
+		return Err(Error::new(ErrorKind::InvalidData, "Invalid module version"));
+	}
+
+	let string_list = parse_list_of(s, parse_string)?;
+	let function_list = parse_list_of(s, parse_function)?;
+	let entry_point = parse_any_size(s)?;
+
+	Ok(Module::new(function_list, string_list, entry_point))
 }
 
 pub fn parse(view: &BinaryView) -> Result<Module, ()> {
@@ -202,5 +232,7 @@ pub fn parse(view: &BinaryView) -> Result<Module, ()> {
 		.read_buffer(0, view.len())
 		.expect("Failed to read buffer");
 
-	module_parser().parse(buffer.get_data()).map_err(|_| ())
+	let mut cursor = Cursor::new(buffer.get_data());
+
+	parse_module(&mut cursor).map_err(drop)
 }
