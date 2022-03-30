@@ -164,24 +164,23 @@ impl BaseArchitecture for Architecture {
 				OpType::Integer => builder.add_integer(raw),
 				OpType::Constant => {
 					let module = MODULE.read().unwrap();
-					let list = module.by_address(addr)?.constant_list();
+					let func = module.by_address(addr)?;
+					let value = func.constant_list().data.get(raw as usize)?;
 
-					builder.add_constant(raw.try_into().ok()?, &list.data);
+					builder.add_constant(value, func, &module);
 				}
 				OpType::Function => {
 					let module = MODULE.read().unwrap();
-					let list = module.function_list();
+					let global = &module.function_list();
+					let adjusted = module.by_address(addr)?.reference_list().data[raw as usize];
 
-					let local: usize = raw.try_into().ok()?;
-					let adjusted = module.by_address(addr)?.reference_list().data[local];
-
-					builder.add_function(adjusted, &list.data);
+					builder.add_function(adjusted, &global.data);
 				}
 				OpType::Import => {
 					let module = MODULE.read().unwrap();
-					let list = module.by_address(addr)?.constant_list();
+					let func = module.by_address(addr)?;
 
-					builder.add_import(raw as u32, &list.data);
+					builder.add_import(raw as u32, func, &module);
 				}
 				OpType::BuiltIn => builder.add_built_in(raw.try_into().ok()?),
 			}

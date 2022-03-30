@@ -6,7 +6,7 @@ use std::{
 use binaryninja::binaryview::{BinaryView, BinaryViewBase, BinaryViewExt};
 use num_enum::TryFromPrimitive;
 
-use super::data::{Function, List, Module};
+use super::data::{Function, List, Module, Value};
 
 type PResult<T> = std::io::Result<T>;
 type Stream<'a> = Cursor<&'a [u8]>;
@@ -131,34 +131,49 @@ fn parse_code(s: &mut Stream) -> PResult<Range<usize>> {
 	Ok(start..position_of(s))
 }
 
-fn parse_constant(s: &mut Stream) -> PResult<Range<usize>> {
-	let start = position_of(s);
+fn parse_constant(s: &mut Stream) -> PResult<Value> {
 	let tag = parse_u8(s)?
 		.try_into()
 		.map_err(|_| Error::new(ErrorKind::InvalidData, "Invalid constant tag"))?;
 
-	match tag {
-		TypeConstant::Nil => {}
+	let value = match tag {
+		TypeConstant::Nil => Value::Nil,
 		TypeConstant::Boolean => {
-			parse_u8(s)?;
+			if parse_u8(s)? == 0 {
+				Value::False
+			} else {
+				Value::True
+			}
 		}
 		TypeConstant::Number => {
-			parse_u64(s)?;
+			let temp = parse_u64(s)?;
+			let data = f64::from_bits(temp);
+
+			Value::Number(data)
 		}
-		TypeConstant::String | TypeConstant::Closure => {
-			parse_any_size(s)?;
+		TypeConstant::String => {
+			let index = parse_any_size(s)?;
+
+			Value::String(index)
 		}
 		TypeConstant::Import => {
-			parse_u32(s)?;
+			let data = parse_u32(s)?;
+
+			Value::Import(data)
 		}
 		TypeConstant::Table => {
 			parse_list_ignored(s, parse_any_size)?;
+
+			Value::Table
 		}
-	}
+		TypeConstant::Closure => {
+			let index = parse_any_size(s)?;
 
-	let end = position_of(s);
+			Value::Closure(index)
+		}
+	};
 
-	Ok(start..end)
+	Ok(value)
 }
 
 fn parse_line_info(len: usize, s: &mut Stream) -> PResult<()> {

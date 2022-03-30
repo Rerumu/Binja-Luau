@@ -8,11 +8,28 @@ pub struct List<T> {
 	pub range: Range,
 }
 
+pub enum Value {
+	Nil,
+	False,
+	True,
+	Number(f64),
+	String(usize),
+	Closure(usize),
+	Import(u32),
+	Table,
+}
+
+impl Default for Value {
+	fn default() -> Self {
+		Self::Nil
+	}
+}
+
 #[derive(Default)]
 pub struct Function {
 	position: Range,
 	code: Range,
-	constant_list: List<Range>,
+	constant_list: List<Value>,
 	reference_list: List<usize>,
 }
 
@@ -20,7 +37,7 @@ impl Function {
 	pub fn new(
 		position: Range,
 		code: Range,
-		constant_list: List<Range>,
+		constant_list: List<Value>,
 		reference_list: List<usize>,
 	) -> Self {
 		Self {
@@ -39,7 +56,7 @@ impl Function {
 		self.code.clone()
 	}
 
-	pub fn constant_list(&self) -> &List<Range> {
+	pub fn constant_list(&self) -> &List<Value> {
 		&self.constant_list
 	}
 

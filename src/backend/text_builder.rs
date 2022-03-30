@@ -1,30 +1,54 @@
-use std::ops::Range;
-
 use binaryninja::architecture::{InstructionTextToken, InstructionTextTokenContents};
 
 use crate::{
 	decoder::{
 		inst::get_jump_target, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown,
 	},
-	file::data::Function,
+	file::data::{Function, Module, Value},
 };
 
-const MAX_INST_PADDING: usize = Opcode::PrepVariadic.mnemonic().len();
+const MAX_PADDING: usize = 8;
 
 #[derive(Default)]
 pub struct TextBuilder {
 	buffer: Vec<InstructionTextToken>,
 }
 
+// TODO: Fallible additions
 impl TextBuilder {
 	pub fn new() -> Self {
 		Self::default()
 	}
 
-	fn add_space(&mut self) {
-		let token = InstructionTextToken::new(InstructionTextTokenContents::OperandSeparator, " ");
+	fn set_adjustment(&mut self) {
+		let mut iter = self.buffer.iter().enumerate();
+		let mut adjustment = Vec::new();
+		let mut accumulated = 0;
 
-		self.buffer.push(token);
+		while let Some((i, token)) = iter.next() {
+			accumulated += token.text().to_bytes().len();
+
+			if token.contents() == InstructionTextTokenContents::BeginMemoryOperand {
+				let after = iter.next().unwrap().1;
+
+				accumulated += after.text().to_bytes().len();
+
+				continue;
+			}
+
+			let remain = MAX_PADDING - accumulated % MAX_PADDING;
+
+			adjustment.push((i, remain));
+			accumulated = 0;
+		}
+
+		for (i, remain) in adjustment.into_iter().rev() {
+			let pad = " ".repeat(remain);
+			let token =
+				InstructionTextToken::new(InstructionTextTokenContents::OperandSeparator, pad);
+
+			self.buffer.insert(i + 1, token);
+		}
 	}
 
 	pub fn add_mnemonic(&mut self, opcode: Opcode) {
@@ -32,20 +56,15 @@ impl TextBuilder {
 		let token = InstructionTextToken::new(InstructionTextTokenContents::Instruction, name);
 
 		self.buffer.push(token);
-
-		for _ in 0..MAX_INST_PADDING.saturating_sub(name.len()) {
-			self.add_space();
-		}
 	}
 
 	pub fn add_location(&mut self, addr: u64, offset: i64) {
 		let target = get_jump_target(addr, offset);
 		let token = InstructionTextToken::new(
-			InstructionTextTokenContents::CodeRelativeAddress(target),
+			InstructionTextTokenContents::PossibleAddress(target),
 			format!("{offset:+}"),
 		);
 
-		self.add_space();
 		self.buffer.push(token);
 	}
 
@@ -53,7 +72,6 @@ impl TextBuilder {
 		let token =
 			InstructionTextToken::new(InstructionTextTokenContents::Register, format!("r{reg}"));
 
-		self.add_space();
 		self.buffer.push(token);
 	}
 
@@ -61,37 +79,83 @@ impl TextBuilder {
 		let token =
 			InstructionTextToken::new(InstructionTextTokenContents::Register, format!("u{upv}"));
 
-		self.add_space();
 		self.buffer.push(token);
+	}
+
+	fn add_memory_begin(&mut self, what: &str) {
+		let token =
+			InstructionTextToken::new(InstructionTextTokenContents::BeginMemoryOperand, what);
+
+		self.buffer.push(token);
+	}
+
+	fn add_memory_end(&mut self, what: &str) {
+		let token = InstructionTextToken::new(InstructionTextTokenContents::EndMemoryOperand, what);
+
+		self.buffer.push(token);
+	}
+
+	fn add_named_integer(&mut self, name: &str) {
+		let token = InstructionTextToken::new(InstructionTextTokenContents::Integer(0), name);
+
+		self.add_memory_begin("(");
+		self.buffer.push(token);
+		self.add_memory_end(")");
 	}
 
 	pub fn add_boolean(&mut self, value: bool) {
-		let token = InstructionTextToken::new(
-			InstructionTextTokenContents::Integer(value.into()),
-			value.to_string(),
-		);
+		let name = if value { "true" } else { "false" };
 
-		self.add_space();
-		self.buffer.push(token);
+		self.add_named_integer(name);
 	}
 
 	pub fn add_integer(&mut self, value: i32) {
-		let token =
-			InstructionTextToken::new(InstructionTextTokenContents::Integer(0), value.to_string());
+		let name = value.to_string();
 
-		self.add_space();
-		self.buffer.push(token);
+		self.add_named_integer(&name);
 	}
 
-	pub fn add_constant(&mut self, index: usize, list: &[Range<usize>]) {
-		let target = list.get(index).map_or(0, |v| v.start as u64);
-		let token = InstructionTextToken::new(
-			InstructionTextTokenContents::PossibleAddress(target),
-			format!("kst_{index}"),
-		);
+	pub fn add_constant(&mut self, value: &Value, func: &Function, parent: &Module) {
+		match value {
+			Value::Nil => self.add_named_integer("nil"),
+			Value::False => self.add_boolean(false),
+			Value::True => self.add_boolean(true),
+			Value::Number(n) => {
+				let token = InstructionTextToken::new(
+					InstructionTextTokenContents::FloatingPoint,
+					n.to_string(),
+				);
 
-		self.add_space();
-		self.buffer.push(token);
+				self.add_memory_begin("(");
+				self.buffer.push(token);
+				self.add_memory_end(")");
+			}
+			Value::String(index) => {
+				if *index == 0 {
+					self.add_named_integer("no_string");
+
+					return;
+				}
+
+				let adjusted = *index - 1;
+				let address = parent.string_list().data[adjusted].start as u64;
+				let token = InstructionTextToken::new(
+					InstructionTextTokenContents::PossibleAddress(address),
+					format!("str_{adjusted}"),
+				);
+
+				self.add_memory_begin("[");
+				self.buffer.push(token);
+				self.add_memory_end("]");
+			}
+			Value::Closure(index) => {
+				let global = &parent.function_list().data;
+
+				self.add_function(*index, global);
+			}
+			Value::Import(data) => self.add_import(*data, func, parent),
+			Value::Table => self.add_named_integer("table"),
+		};
 	}
 
 	pub fn add_built_in(&mut self, index: u8) {
@@ -101,35 +165,38 @@ impl TextBuilder {
 		};
 
 		let token = InstructionTextToken::new(InstructionTextTokenContents::FloatingPoint, name);
-		let wrap =
-			InstructionTextToken::new(InstructionTextTokenContents::BeginMemoryOperand, "\"");
 
-		self.add_space();
-		self.buffer.push(wrap.clone());
+		self.add_memory_begin("\"");
 		self.buffer.push(token);
-		self.buffer.push(wrap);
+		self.add_memory_end("\"");
 	}
 
-	pub fn add_function(&mut self, index: usize, list: &[Function]) {
-		let target = list.get(index).map_or(0, |v| v.code().start as u64);
+	pub fn add_function(&mut self, index: usize, global: &[Function]) {
+		let target = global[index].code().start as u64;
+
 		let token = InstructionTextToken::new(
 			InstructionTextTokenContents::PossibleAddress(target),
 			format!("func_{index}"),
 		);
 
-		self.add_space();
 		self.buffer.push(token);
 	}
 
-	pub fn add_import(&mut self, encoded: u32, list: &[Range<usize>]) {
+	pub fn add_import(&mut self, encoded: u32, func: &Function, parent: &Module) {
+		let list = &func.constant_list().data;
+
 		for name in RefUnknown::from(encoded) {
-			self.add_constant(name, list);
+			let value = &list[name];
+
+			self.add_constant(value, func, parent);
 		}
 	}
 }
 
 impl From<TextBuilder> for Vec<InstructionTextToken> {
-	fn from(builder: TextBuilder) -> Self {
+	fn from(mut builder: TextBuilder) -> Self {
+		builder.set_adjustment();
+
 		builder.buffer
 	}
 }

@@ -10,6 +10,8 @@ use binaryninja::{
 	rc::Ref,
 	section::{Section, Semantics},
 	segment::Segment,
+	symbol::{Symbol, SymbolType},
+	types::Type,
 	Endianness,
 };
 
@@ -79,6 +81,25 @@ impl View {
 		);
 
 		self.add_section(Section::new("string_list", range).semantics(Semantics::ReadOnlyData));
+	}
+
+	fn add_string_data(&self, data: &[Range<usize>]) {
+		if data.is_empty() {
+			return;
+		}
+
+		let plat = self.default_platform().unwrap();
+		let byte = &*Type::char();
+
+		for (i, range) in data.iter().enumerate() {
+			let name = format!("str_{i}");
+			let sym = Symbol::new(SymbolType::Data, name, range.start as u64).create();
+
+			let typ = &*Type::array(byte, range.len() as u64);
+
+			self.define_auto_symbol_with_type(&sym, &plat, typ)
+				.expect("Failed to define symbol");
+		}
 	}
 
 	fn add_function_segment(&self, func: &Function) {
@@ -160,9 +181,10 @@ unsafe impl CustomBinaryView for View {
 		self.set_default_arch(&arch);
 		self.set_default_platform(&plat);
 
-		let str_range = args.string_list().range.clone();
+		let str_list = args.string_list();
 
-		self.add_string_section(str_range);
+		self.add_string_section(str_list.range.clone());
+		self.add_string_data(&str_list.data);
 
 		for (i, func) in args.function_list().data.iter().enumerate() {
 			let constant = func.constant_list().range.clone();
