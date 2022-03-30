@@ -4,7 +4,7 @@ use crate::{
 	decoder::{
 		inst::get_jump_target, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown,
 	},
-	file::data::{Function, Module, Value},
+	file::data::{Function, Module, Range, Value},
 };
 
 const MAX_PADDING: usize = 8;
@@ -14,7 +14,6 @@ pub struct TextBuilder {
 	buffer: Vec<InstructionTextToken>,
 }
 
-// TODO: Fallible additions
 impl TextBuilder {
 	pub fn new() -> Self {
 		Self::default()
@@ -115,64 +114,71 @@ impl TextBuilder {
 		self.add_named_integer(&name);
 	}
 
-	pub fn add_constant(&mut self, value: &Value, func: &Function, parent: &Module) {
+	fn add_number(&mut self, value: f64) {
+		let token = InstructionTextToken::new(
+			InstructionTextTokenContents::FloatingPoint,
+			value.to_string(),
+		);
+
+		self.add_memory_begin("(");
+		self.buffer.push(token);
+		self.add_memory_end(")");
+	}
+
+	fn add_string(&mut self, index: usize, str_list: &[Range]) -> Option<()> {
+		if index == 0 {
+			self.add_named_integer("no_string");
+
+			return Some(());
+		}
+
+		let adjusted = index - 1;
+		let address = str_list.get(adjusted)?.start;
+
+		let token = InstructionTextToken::new(
+			InstructionTextTokenContents::PossibleAddress(address as u64),
+			format!("str_{adjusted}"),
+		);
+
+		self.add_memory_begin("[");
+		self.buffer.push(token);
+		self.add_memory_end("]");
+
+		Some(())
+	}
+
+	pub fn add_constant(&mut self, value: &Value, func: &Function, parent: &Module) -> Option<()> {
 		match value {
 			Value::Nil => self.add_named_integer("nil"),
 			Value::False => self.add_boolean(false),
 			Value::True => self.add_boolean(true),
-			Value::Number(n) => {
-				let token = InstructionTextToken::new(
-					InstructionTextTokenContents::FloatingPoint,
-					n.to_string(),
-				);
-
-				self.add_memory_begin("(");
-				self.buffer.push(token);
-				self.add_memory_end(")");
-			}
-			Value::String(index) => {
-				if *index == 0 {
-					self.add_named_integer("no_string");
-
-					return;
-				}
-
-				let adjusted = *index - 1;
-				let address = parent.string_list().data[adjusted].start as u64;
-				let token = InstructionTextToken::new(
-					InstructionTextTokenContents::PossibleAddress(address),
-					format!("str_{adjusted}"),
-				);
-
-				self.add_memory_begin("[");
-				self.buffer.push(token);
-				self.add_memory_end("]");
-			}
+			Value::Number(n) => self.add_number(*n),
+			Value::String(index) => self.add_string(*index, &parent.string_list().data)?,
 			Value::Closure(index) => {
 				let global = &parent.function_list().data;
 
-				self.add_function(*index, global);
+				self.add_function(*index, global)?;
 			}
-			Value::Import(data) => self.add_import(*data, func, parent),
+			Value::Import(data) => self.add_import(*data, func, parent)?,
 			Value::Table => self.add_named_integer("table"),
 		};
+
+		Some(())
 	}
 
-	pub fn add_built_in(&mut self, index: u8) {
-		let name = match RefKnown::try_from(index).ok() {
-			Some(v) => v.to_string(),
-			None => "unknown".to_string(),
-		};
-
+	pub fn add_built_in(&mut self, index: u8) -> Option<()> {
+		let name = RefKnown::try_from(index).ok()?.name();
 		let token = InstructionTextToken::new(InstructionTextTokenContents::FloatingPoint, name);
 
 		self.add_memory_begin("\"");
 		self.buffer.push(token);
 		self.add_memory_end("\"");
+
+		Some(())
 	}
 
-	pub fn add_function(&mut self, index: usize, global: &[Function]) {
-		let target = global[index].code().start as u64;
+	pub fn add_function(&mut self, index: usize, global: &[Function]) -> Option<()> {
+		let target = global.get(index)?.code().start as u64;
 
 		let token = InstructionTextToken::new(
 			InstructionTextTokenContents::PossibleAddress(target),
@@ -180,16 +186,20 @@ impl TextBuilder {
 		);
 
 		self.buffer.push(token);
+
+		Some(())
 	}
 
-	pub fn add_import(&mut self, encoded: u32, func: &Function, parent: &Module) {
+	pub fn add_import(&mut self, encoded: u32, func: &Function, parent: &Module) -> Option<()> {
 		let list = &func.constant_list().data;
 
 		for name in RefUnknown::from(encoded) {
-			let value = &list[name];
+			let value = list.get(name)?;
 
-			self.add_constant(value, func, parent);
+			self.add_constant(value, func, parent)?;
 		}
+
+		Some(())
 	}
 }
 

@@ -75,7 +75,7 @@ pub enum RefKnown {
 }
 
 impl RefKnown {
-	fn name(self) -> &'static str {
+	pub fn name(self) -> &'static str {
 		match self {
 			RefKnown::Assert => "assert",
 			RefKnown::Abs => "math.abs",
@@ -135,11 +135,5 @@ impl RefKnown {
 			RefKnown::Countrz => "bit32.countrz",
 			RefKnown::Select => "select",
 		}
-	}
-}
-
-impl std::fmt::Display for RefKnown {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		f.write_str(self.name())
 	}
 }
