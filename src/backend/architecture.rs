@@ -6,7 +6,7 @@ use binaryninja::{
 	binaryninjacore_sys::BNLowLevelILFlagCondition,
 	callingconvention::CallingConventionBase,
 	disassembly::InstructionTextToken,
-	llil::{LiftedExpr, Lifter},
+	llil::{Label, LiftedExpr, Lifter},
 	Endianness,
 };
 
@@ -15,13 +15,26 @@ use crate::{
 		inst::Inst,
 		opcode::{OpType, Opcode},
 	},
-	file::view::MODULE,
+	file::{
+		data::{Module, Value},
+		view::MODULE,
+	},
 };
 
 use super::{
 	associated::{Register, RegisterInfo},
 	text_builder::TextBuilder,
 };
+
+const NUM_SIZE: usize = 8;
+
+type Expression<'func> = binaryninja::llil::Expression<
+	'func,
+	Architecture,
+	binaryninja::llil::Mutable,
+	binaryninja::llil::NonSSA<binaryninja::llil::LiftedNonSSA>,
+	binaryninja::llil::ValueExpr,
+>;
 
 pub struct Architecture {
 	pub handle: CustomArchitectureHandle<Self>,
@@ -154,6 +167,107 @@ impl Architecture {
 
 		Some(builder)
 	}
+
+	fn get_stack_offset(il: &Lifter<Self>, index: u8) -> Expression {
+		let offset = index as usize * NUM_SIZE;
+
+		il.add(
+			NUM_SIZE,
+			il.reg(NUM_SIZE, Register::Stack),
+			il.const_int(NUM_SIZE, offset as u64),
+		)
+		.into()
+	}
+
+	fn get_variable(il: &Lifter<Self>, index: u8) -> Expression {
+		let offset = Self::get_stack_offset(il, index);
+
+		il.load(NUM_SIZE, offset).into()
+	}
+
+	fn set_variable<'a, V>(il: &Lifter<Self>, index: u8, value: V)
+	where
+		V: Into<Expression<'a>>,
+	{
+		let offset = Self::get_stack_offset(il, index);
+
+		il.store(NUM_SIZE, offset, value.into()).append();
+	}
+
+	fn set_to_register(il: &Lifter<Self>, index: u8, value: Register) {
+		Self::set_variable(il, index, il.reg(NUM_SIZE, value));
+	}
+
+	fn get_two_var_operands<A, B>(
+		il: &Lifter<Self>,
+		op_1: A,
+		op_2: B,
+	) -> Option<(Expression, Expression)>
+	where
+		A: TryInto<u8>,
+		B: TryInto<u8>,
+	{
+		let var_1 = Self::get_variable(il, op_1.try_into().ok()?);
+		let var_2 = Self::get_variable(il, op_2.try_into().ok()?);
+
+		Some((var_1, var_2))
+	}
+
+	fn add_if_condition<'a, O, C>(
+		il: &Lifter<Self>,
+		addr: u64,
+		offset: O,
+		condition: C,
+	) -> Option<()>
+	where
+		O: Into<i64>,
+		C: Into<Expression<'a>>,
+	{
+		let target = Inst::get_jump_target(addr, offset);
+		let on_true = il.label_for_address(target)?;
+		let mut on_false = Label::new();
+
+		il.if_expr(condition.into(), on_true, &on_false).append();
+		il.mark_label(&mut on_false);
+
+		Some(())
+	}
+
+	fn get_value(addr: u64, index: usize, parent: &Module) -> Option<&Value> {
+		parent.by_address(addr)?.constant_list().data.get(index)
+	}
+
+	fn get_as_constant<'a>(
+		il: &'a Lifter<Self>,
+		value: &Value,
+		parent: &Module,
+	) -> Option<Expression<'a>> {
+		let result = match value {
+			Value::Nil => il.reg(NUM_SIZE, Register::Nil),
+			Value::False => il.reg(NUM_SIZE, Register::False),
+			Value::True => il.reg(NUM_SIZE, Register::True),
+			// TODO: Need float support
+			Value::Number(_) => il.const_int(NUM_SIZE, 1337),
+			Value::String(i) => {
+				let list = &parent.string_list().data;
+				let ptr = match i.checked_sub(1) {
+					Some(i) => list.get(i)?.start as u64,
+					None => 0,
+				};
+
+				il.const_ptr(ptr)
+			}
+			Value::Closure(i) => {
+				let ptr = parent.function_list().data.get(*i)?.position().start as u64;
+
+				il.const_ptr(ptr)
+			}
+			Value::Import(_) => il.unimplemented(),
+			Value::Table => il.unimplemented(),
+		};
+
+		Some(result)
+	}
 }
 
 impl BaseArchitecture for Architecture {
@@ -176,11 +290,11 @@ impl BaseArchitecture for Architecture {
 	}
 
 	fn address_size(&self) -> usize {
-		8
+		NUM_SIZE
 	}
 
 	fn default_integer_size(&self) -> usize {
-		8
+		NUM_SIZE
 	}
 
 	fn instruction_alignment(&self) -> usize {
@@ -219,11 +333,274 @@ impl BaseArchitecture for Architecture {
 
 	fn instruction_llil(
 		&self,
-		_data: &[u8],
-		_addr: u64,
-		_il: &mut Lifter<Self>,
+		data: &[u8],
+		addr: u64,
+		il: &mut Lifter<Self>,
 	) -> Option<(usize, bool)> {
-		None
+		let decoder = Inst::try_from(data).ok()?;
+		let op = decoder.op();
+
+		match op {
+			Opcode::Nop => il.nop().append(),
+			Opcode::Break => il.bp().append(),
+			Opcode::LoadNil => Self::set_to_register(il, decoder.a(), Register::Nil),
+			Opcode::LoadBoolean => {
+				let target = Inst::get_jump_target(addr, decoder.c());
+				let value = if decoder.b() == 0 {
+					Register::False
+				} else {
+					Register::True
+				};
+
+				Self::set_to_register(il, decoder.a(), value);
+				il.goto(il.label_for_address(target)?).append();
+			}
+			Opcode::LoadInteger => {
+				let value = decoder.d() as u64;
+
+				Self::set_variable(il, decoder.a(), il.const_int(NUM_SIZE, value));
+			}
+			Opcode::LoadConstant => {
+				let module = MODULE.read().unwrap();
+				let reffed = &module.by_address(addr)?.constant_list().data[decoder.d() as usize];
+				let value = Self::get_as_constant(il, reffed, &module)?;
+
+				Self::set_variable(il, decoder.a(), value);
+			}
+			Opcode::Move => {
+				let rhs = Self::get_variable(il, decoder.b());
+
+				Self::set_variable(il, decoder.a(), rhs);
+			}
+			// Opcode::GetGlobal => todo!(),
+			// Opcode::SetGlobal => todo!(),
+			// Opcode::GetUpValue => todo!(),
+			// Opcode::SetUpValue => todo!(),
+			// Opcode::CloseUpValues => todo!(),
+			// Opcode::GetImport => todo!(),
+			// Opcode::GetTable => todo!(),
+			// Opcode::SetTable => todo!(),
+			// Opcode::GetTableKey => todo!(),
+			// Opcode::SetTableKey => todo!(),
+			// Opcode::GetTableIndex => todo!(),
+			// Opcode::SetTableIndex => todo!(),
+			// Opcode::NewClosure => todo!(),
+			// Opcode::NameCall => todo!(),
+			// Opcode::Call => todo!(),
+			Opcode::Return if decoder.b() == 0 => {
+				il.unimplemented().append();
+			}
+			Opcode::Return => {
+				let start = Self::get_stack_offset(il, decoder.a());
+				let count = decoder.b() as usize - 1;
+
+				il.ret(il.load(count * NUM_SIZE, start)).append();
+			}
+			Opcode::Jump | Opcode::JumpSafe => {
+				let target = Inst::get_jump_target(addr, decoder.d());
+
+				il.goto(il.label_for_address(target)?).append();
+			}
+			Opcode::JumpIfTruthy => {
+				let cond = Self::get_variable(il, decoder.a());
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::JumpIfFalsy => {
+				let variable = Self::get_variable(il, decoder.a());
+				let cond = il.not(NUM_SIZE, variable);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::JumpIfEqual => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
+				let cond = il.cmp_e(NUM_SIZE, lhs, rhs);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::JumpIfLessEqual => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
+				let cond = il.cmp_sle(NUM_SIZE, lhs, rhs);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::JumpIfLessThan => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
+				let cond = il.cmp_slt(NUM_SIZE, lhs, rhs);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::JumpIfNotEqual => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
+				let cond = il.cmp_ne(NUM_SIZE, lhs, rhs);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::JumpIfMoreThan => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
+				let cond = il.cmp_sgt(NUM_SIZE, lhs, rhs);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::JumpIfMoreEqual => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
+				let cond = il.cmp_sge(NUM_SIZE, lhs, rhs);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::Add => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.b(), decoder.c())?;
+				let result = il.add(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::Sub => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.b(), decoder.c())?;
+				let result = il.sub(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::Mul => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.b(), decoder.c())?;
+				let result = il.mul(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::Div => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.b(), decoder.c())?;
+				let result = il.divs(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::Mod => {
+				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.b(), decoder.c())?;
+				let result = il.mods(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			// Opcode::Pow => todo!(),
+			Opcode::AddConstant => {
+				let module = MODULE.read().unwrap();
+				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
+
+				let lhs = Self::get_variable(il, decoder.b());
+				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let result = il.add(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::SubConstant => {
+				let module = MODULE.read().unwrap();
+				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
+
+				let lhs = Self::get_variable(il, decoder.b());
+				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let result = il.sub(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::MulConstant => {
+				let module = MODULE.read().unwrap();
+				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
+
+				let lhs = Self::get_variable(il, decoder.b());
+				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let result = il.mul(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::DivConstant => {
+				let module = MODULE.read().unwrap();
+				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
+
+				let lhs = Self::get_variable(il, decoder.b());
+				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let result = il.divs(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::ModConstant => {
+				let module = MODULE.read().unwrap();
+				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
+
+				let lhs = Self::get_variable(il, decoder.b());
+				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let result = il.mods(NUM_SIZE, lhs, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			// Opcode::PowConstant => todo!(),
+			// Opcode::And => todo!(),
+			// Opcode::Or => todo!(),
+			// Opcode::AndConstant => todo!(),
+			// Opcode::OrConstant => todo!(),
+			// Opcode::Concat => todo!(),
+			Opcode::Not => {
+				let rhs = Self::get_variable(il, decoder.b());
+				let result = il.not(NUM_SIZE, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			Opcode::Minus => {
+				let rhs = Self::get_variable(il, decoder.b());
+				let result = il.neg(NUM_SIZE, rhs);
+
+				Self::set_variable(il, decoder.a(), result);
+			}
+			// Opcode::Length => todo!(),
+			// Opcode::NewTable => todo!(),
+			// Opcode::DupTable => todo!(),
+			// Opcode::SetList => todo!(),
+			// Opcode::ForNumericPrep => todo!(),
+			// Opcode::ForNumericLoop => todo!(),
+			// Opcode::ForGenericLoop => todo!(),
+			// Opcode::ForGenericPrepINext => todo!(),
+			// Opcode::ForGenericLoopINext => todo!(),
+			// Opcode::ForGenericPrepNext => todo!(),
+			// Opcode::ForGenericLoopNext => todo!(),
+			// Opcode::GetVariadic => todo!(),
+			// Opcode::DupClosure => todo!(),
+			// Opcode::PrepVariadic => todo!(),
+			Opcode::LoadConstantEx => {
+				let module = MODULE.read().unwrap();
+				let reffed = Self::get_value(addr, decoder.adjacent() as usize, &module)?;
+				let value = Self::get_as_constant(il, reffed, &module)?;
+
+				Self::set_variable(il, decoder.a(), value);
+			}
+			Opcode::JumpEx => {
+				let target = Inst::get_jump_target(addr, decoder.e());
+
+				il.goto(il.label_for_address(target)?).append();
+			}
+			// Opcode::FastCall => todo!(),
+			// Opcode::Coverage => todo!(),
+			// Opcode::Capture => todo!(),
+			Opcode::JumpIfConstant => {
+				let module = MODULE.read().unwrap();
+				let reffed = Self::get_value(addr, decoder.adjacent() as usize, &module)?;
+				let lhs = Self::get_variable(il, decoder.a());
+				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let cond = il.cmp_e(NUM_SIZE, lhs, rhs);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			Opcode::JumpIfNotConstant => {
+				let module = MODULE.read().unwrap();
+				let reffed = Self::get_value(addr, decoder.adjacent() as usize, &module)?;
+				let lhs = Self::get_variable(il, decoder.a());
+				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let cond = il.cmp_ne(NUM_SIZE, lhs, rhs);
+
+				Self::add_if_condition(il, addr, decoder.d(), cond);
+			}
+			// Opcode::FastCall1 => todo!(),
+			// Opcode::FastCall2 => todo!(),
+			// Opcode::FastCall2K => todo!(),
+			_ => il.unimplemented().append(),
+		}
+
+		Some((op.len(), true))
 	}
 
 	fn flags_required_for_flag_condition(
