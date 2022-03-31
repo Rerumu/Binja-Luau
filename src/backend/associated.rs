@@ -33,7 +33,12 @@ impl IRegisterInfo for RegisterInfo {
 #[derive(TryFromPrimitive, Clone, Copy)]
 pub enum Register {
 	Stack,
+	Top,
 	Return,
+
+	Nil,
+	False,
+	True,
 }
 
 impl IRegister for Register {
@@ -41,9 +46,14 @@ impl IRegister for Register {
 
 	fn name(&self) -> Cow<str> {
 		match self {
-			Register::Stack => "stack_pointer".into(),
-			Register::Return => "return_pointer".into(),
+			Register::Stack => "stack_pointer",
+			Register::Top => "top_pointer",
+			Register::Return => "return_pointer",
+			Register::Nil => "nil",
+			Register::False => "false",
+			Register::True => "true",
 		}
+		.into()
 	}
 
 	fn info(&self) -> Self::InfoType {
