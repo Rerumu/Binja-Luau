@@ -1,9 +1,7 @@
 use binaryninja::architecture::{InstructionTextToken, InstructionTextTokenContents};
 
 use crate::{
-	decoder::{
-		inst::get_jump_target, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown,
-	},
+	decoder::{inst::Inst, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown},
 	file::data::{Function, Module, Range, Value},
 };
 
@@ -58,7 +56,7 @@ impl TextBuilder {
 	}
 
 	pub fn add_location(&mut self, addr: u64, offset: i64) {
-		let target = get_jump_target(addr, offset);
+		let target = Inst::get_jump_target(addr, offset);
 		let token = InstructionTextToken::new(
 			InstructionTextTokenContents::PossibleAddress(target),
 			format!("{offset:+}"),

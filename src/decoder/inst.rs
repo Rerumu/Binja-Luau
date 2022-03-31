@@ -51,6 +51,13 @@ impl<'a> Inst<'a> {
 			OpName::X => self.adjacent(),
 		}
 	}
+
+	pub fn get_jump_target<T>(start: u64, offset: T) -> u64
+	where
+		T: Into<i64>,
+	{
+		start.wrapping_add_signed(offset.into() * 4) + 4
+	}
 }
 
 impl<'a> TryFrom<&'a [u8]> for Inst<'a> {
@@ -66,8 +73,4 @@ impl<'a> TryFrom<&'a [u8]> for Inst<'a> {
 			Ok(Self(data))
 		}
 	}
-}
-
-pub fn get_jump_target(addr: u64, offset: i64) -> u64 {
-	addr.wrapping_add_signed(offset * 4) + 4
 }

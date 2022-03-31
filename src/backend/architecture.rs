@@ -11,7 +11,7 @@ use binaryninja::{
 
 use crate::{
 	decoder::{
-		inst::{get_jump_target, Inst},
+		inst::Inst,
 		opcode::{OpType, Opcode},
 	},
 	file::view::MODULE,
@@ -32,16 +32,15 @@ impl Architecture {
 		Self { handle, core }
 	}
 
-	// Technically can never fail
-	fn get_opt_instruction_info(decoder: Inst, addr: u64) -> Option<InstructionInfo> {
+	fn get_opt_instruction_info(decoder: Inst, addr: u64) -> InstructionInfo {
 		let op = decoder.op();
-		let next = (op.len() / 4 - 1).try_into().ok()?;
+		let next = op.len() as i64 / 4 - 1;
 
 		let mut info = InstructionInfo::new(op.len(), false);
 
 		match op {
 			Opcode::LoadBoolean => {
-				let target = get_jump_target(addr, decoder.c().into());
+				let target = Inst::get_jump_target(addr, decoder.c());
 
 				info.add_branch(BranchInfo::Unconditional(target), None);
 			}
@@ -49,12 +48,12 @@ impl Architecture {
 				info.add_branch(BranchInfo::FunctionReturn, None);
 			}
 			Opcode::Jump | Opcode::JumpSafe => {
-				let target = get_jump_target(addr, decoder.d().into());
+				let target = Inst::get_jump_target(addr, decoder.d());
 
 				info.add_branch(BranchInfo::Unconditional(target), None);
 			}
 			Opcode::JumpEx => {
-				let target = get_jump_target(addr, decoder.e().into());
+				let target = Inst::get_jump_target(addr, decoder.e());
 
 				info.add_branch(BranchInfo::Unconditional(target), None);
 			}
@@ -75,15 +74,15 @@ impl Architecture {
 			| Opcode::ForGenericLoopNext
 			| Opcode::JumpIfConstant
 			| Opcode::JumpIfNotConstant => {
-				let on_false = get_jump_target(addr, next);
-				let on_true = get_jump_target(addr, decoder.d().into());
+				let on_false = Inst::get_jump_target(addr, next);
+				let on_true = Inst::get_jump_target(addr, decoder.d());
 
 				info.add_branch(BranchInfo::False(on_false), None);
 				info.add_branch(BranchInfo::True(on_true), None);
 			}
 			Opcode::FastCall | Opcode::FastCall1 | Opcode::FastCall2 | Opcode::FastCall2K => {
-				let on_false = get_jump_target(addr, next);
-				let on_true = get_jump_target(addr, (decoder.c() + 1).into());
+				let on_false = Inst::get_jump_target(addr, next);
+				let on_true = Inst::get_jump_target(addr, decoder.c() + 1);
 
 				info.add_branch(BranchInfo::Indirect, None);
 				info.add_branch(BranchInfo::False(on_false), None);
@@ -92,7 +91,7 @@ impl Architecture {
 			_ => {}
 		}
 
-		Some(info)
+		info
 	}
 
 	fn get_opt_instruction_text(decoder: Inst, addr: u64) -> Option<TextBuilder> {
@@ -121,9 +120,13 @@ impl Architecture {
 				OpType::Function => {
 					let module = MODULE.read().unwrap();
 					let global = &module.function_list();
-					let adjusted = module.by_address(addr)?.reference_list().data[raw as usize];
+					let adjusted = module
+						.by_address(addr)?
+						.reference_list()
+						.data
+						.get(raw as usize)?;
 
-					builder.add_function(adjusted, &global.data)?;
+					builder.add_function(*adjusted, &global.data)?;
 				}
 				OpType::Import => {
 					let module = MODULE.read().unwrap();
@@ -186,8 +189,9 @@ impl BaseArchitecture for Architecture {
 
 	fn instruction_info(&self, data: &[u8], addr: u64) -> Option<InstructionInfo> {
 		let decoder = Inst::try_from(data).ok()?;
+		let info = Self::get_opt_instruction_info(decoder, addr);
 
-		Self::get_opt_instruction_info(decoder, addr)
+		Some(info)
 	}
 
 	fn instruction_text(
