@@ -1,6 +1,5 @@
 #![feature(mixed_integer_ops)]
 #![feature(once_cell)]
-#![feature(trait_alias)]
 
 use binaryninja::{
 	architecture::register_architecture, callingconvention::register_calling_convention,
