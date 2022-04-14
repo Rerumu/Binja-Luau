@@ -28,6 +28,7 @@ impl Default for Value {
 #[derive(Default)]
 pub struct Function {
 	position: Range,
+	name: usize,
 	code: Range,
 	constant_list: List<Value>,
 	reference_list: List<usize>,
@@ -36,12 +37,14 @@ pub struct Function {
 impl Function {
 	pub fn new(
 		position: Range,
+		name: usize,
 		code: Range,
 		constant_list: List<Value>,
 		reference_list: List<usize>,
 	) -> Self {
 		Self {
 			position,
+			name,
 			code,
 			constant_list,
 			reference_list,
@@ -50,6 +53,10 @@ impl Function {
 
 	pub fn position(&self) -> Range {
 		self.position.clone()
+	}
+
+	pub fn name(&self) -> usize {
+		self.name
 	}
 
 	pub fn code(&self) -> Range {

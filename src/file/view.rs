@@ -15,10 +15,7 @@ use binaryninja::{
 	Endianness,
 };
 
-use super::{
-	data::{Function, Module},
-	parser::parse,
-};
+use super::{data::Module, parser::parse};
 
 pub static MODULE: SyncLazy<RwLock<Module>> = SyncLazy::new(RwLock::default);
 
@@ -143,6 +140,19 @@ impl View {
 				.is_auto(true),
 		);
 	}
+
+	fn add_alias_for_function(&self, name: usize, data: &[Range<usize>], start: u64) {
+		let range = match name.checked_sub(1).and_then(|i| data.get(i)) {
+			Some(range) => range,
+			None => return,
+		};
+
+		let raw = self.view.read_vec(range.start as u64, range.len());
+		let name = String::from_utf8_lossy(&raw);
+		let symbol = Symbol::new(SymbolType::Function, name.as_ref(), start).create();
+
+		self.define_auto_symbol(&symbol);
+	}
 }
 
 impl AsRef<BinaryView> for View {
@@ -188,13 +198,15 @@ unsafe impl CustomBinaryView for View {
 
 		for (i, func) in args.function_list().data.iter().enumerate() {
 			let constant = func.constant_list().range.clone();
+			let inst = func.code().start as u64;
 
 			self.add_function_segment(func.position());
 
 			self.add_code_section(i, func.code());
 			self.add_constant_section(i, constant);
 
-			self.add_auto_function(&plat, func.code().start as u64);
+			self.add_auto_function(&plat, inst);
+			self.add_alias_for_function(func.name(), &str_list.data, inst);
 		}
 
 		self.add_entry_point(&plat, args.entry_point());

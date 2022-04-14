@@ -226,7 +226,7 @@ fn parse_function(s: &mut Stream) -> PResult<Function> {
 	let constant_list = parse_list_of(s, parse_constant)?;
 	let reference_list = parse_list_of(s, parse_any_size)?;
 	let _line_defined = parse_any_size(s)?;
-	let _debug_name = parse_any_size(s)?;
+	let debug_name = parse_any_size(s)?;
 
 	parse_debug_info(code.len() / 4, s)?;
 
@@ -234,6 +234,7 @@ fn parse_function(s: &mut Stream) -> PResult<Function> {
 
 	Ok(Function::new(
 		start..end,
+		debug_name,
 		code,
 		constant_list,
 		reference_list,
