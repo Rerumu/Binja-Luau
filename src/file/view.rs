@@ -102,8 +102,8 @@ impl View {
 		}
 	}
 
-	fn add_function_segment(&self, func: &Function) {
-		let position = to_range_u64(func.position());
+	fn add_function_segment(&self, position: Range<usize>) {
+		let position = to_range_u64(position);
 
 		self.add_segment(
 			Segment::new(position.clone())
@@ -189,7 +189,7 @@ unsafe impl CustomBinaryView for View {
 		for (i, func) in args.function_list().data.iter().enumerate() {
 			let constant = func.constant_list().range.clone();
 
-			self.add_function_segment(func);
+			self.add_function_segment(func.position());
 
 			self.add_code_section(i, func.code());
 			self.add_constant_section(i, constant);
