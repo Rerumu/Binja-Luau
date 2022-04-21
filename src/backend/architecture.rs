@@ -97,9 +97,7 @@ impl Architecture {
 	fn get_opt_instruction_text(decoder: Inst, addr: u64) -> Option<TextBuilder> {
 		let opcode = decoder.op();
 
-		let mut builder = TextBuilder::new();
-
-		builder.add_mnemonic(opcode);
+		let mut builder = TextBuilder::with_mnemonic(opcode);
 
 		for (name, typ) in opcode.iter_operands() {
 			let raw = decoder.with_name(name);
