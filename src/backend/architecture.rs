@@ -5,6 +5,7 @@ use binaryninja::{
 	},
 	binaryninjacore_sys::BNLowLevelILFlagCondition,
 	callingconvention::CallingConventionBase,
+	disassembly::InstructionTextToken,
 	llil::{LiftedExpr, Lifter},
 	Endianness,
 };
@@ -155,8 +156,6 @@ impl BaseArchitecture for Architecture {
 
 	type FlagGroup = CoreFlagGroup;
 
-	type InstructionTextContainer = TextBuilder;
-
 	fn endianness(&self) -> Endianness {
 		Endianness::LittleEndian
 	}
@@ -196,11 +195,11 @@ impl BaseArchitecture for Architecture {
 		&self,
 		data: &[u8],
 		addr: u64,
-	) -> Option<(usize, Self::InstructionTextContainer)> {
+	) -> Option<(usize, Vec<InstructionTextToken>)> {
 		let decoder = Inst::try_from(data).ok()?;
 		let builder = Self::get_opt_instruction_text(decoder, addr)?;
 
-		Some((decoder.op().len(), builder))
+		Some((decoder.op().len(), builder.into()))
 	}
 
 	fn instruction_llil(

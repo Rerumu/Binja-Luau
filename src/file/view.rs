@@ -1,4 +1,4 @@
-use std::{lazy::SyncLazy, ops::Range, sync::RwLock};
+use std::{ops::Range, sync::LazyLock, sync::RwLock};
 
 use binaryninja::{
 	architecture::{ArchitectureExt, CoreArchitecture},
@@ -17,7 +17,7 @@ use binaryninja::{
 
 use super::{data::Module, parser::parse};
 
-pub static MODULE: SyncLazy<RwLock<Module>> = SyncLazy::new(RwLock::default);
+pub static MODULE: LazyLock<RwLock<Module>> = LazyLock::new(RwLock::default);
 
 pub struct Builder {
 	pub typ: BinaryViewType,
@@ -36,6 +36,10 @@ impl AsRef<BinaryViewType> for Builder {
 }
 
 impl BinaryViewTypeBase for Builder {
+	fn is_deprecated(&self) -> bool {
+		false
+	}
+
 	fn is_valid_for(&self, data: &BinaryView) -> bool {
 		parse(data).is_ok()
 	}

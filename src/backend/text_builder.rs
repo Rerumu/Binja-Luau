@@ -1,17 +1,27 @@
+use binaryninja::string::BnString;
+
 use crate::{
 	decoder::{inst::Inst, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown},
 	file::data::{Function, Module, Range, Value},
 };
 
-type TextToken = binaryninja::architecture::InstructionTextToken;
-type TextContent = binaryninja::architecture::InstructionTextTokenContents;
+type TextToken = binaryninja::disassembly::InstructionTextToken;
+type TextContent = binaryninja::disassembly::InstructionTextTokenContents;
 
 macro_rules! surrounded {
 	($lhs:literal, $infix:expr, $rhs:literal) => {{
-		let begin = TextToken::new(TextContent::BeginMemoryOperand, $lhs);
-		let end = TextToken::new(TextContent::EndMemoryOperand, $rhs);
+		let begin = TextToken::new(BnString::new($lhs), TextContent::BeginMemoryOperand);
+		let end = TextToken::new(BnString::new($rhs), TextContent::EndMemoryOperand);
 
 		[begin, $infix, end]
+	}};
+}
+
+macro_rules! bn_format {
+	($($arg:tt)*) => {{
+		let data = format!($($arg)*);
+
+		BnString::new(data)
 	}};
 }
 
@@ -33,41 +43,46 @@ impl TextBuilder {
 
 		Self {
 			buffer: vec![
-				TextToken::new(TextContent::Instruction, name),
-				TextToken::new(TextContent::Text, padding),
+				TextToken::new(BnString::new(name), TextContent::Instruction),
+				TextToken::new(BnString::new(padding), TextContent::Text),
 			],
 		}
 	}
 
 	pub fn add_separator(&mut self) {
-		self.buffer
-			.push(TextToken::new(TextContent::OperandSeparator, ", "));
+		self.buffer.push(TextToken::new(
+			BnString::new(", "),
+			TextContent::OperandSeparator,
+		));
 	}
 
 	pub fn add_location(&mut self, addr: u64, offset: i64) {
 		let target = Inst::get_jump_target(addr, offset);
-		let token = TextToken::new(TextContent::PossibleAddress(target), format!("{offset:+}"));
+		let token = TextToken::new(
+			bn_format!("{offset:+}"),
+			TextContent::PossibleAddress(target),
+		);
 
 		self.buffer.push(token);
 		self.add_separator();
 	}
 
 	pub fn add_register(&mut self, register: u8) {
-		let token = TextToken::new(TextContent::Register, format!("r{register}"));
+		let token = TextToken::new(bn_format!("r{register}"), TextContent::Register);
 
 		self.buffer.push(token);
 		self.add_separator();
 	}
 
 	pub fn add_upvalue(&mut self, upvalue: u8) {
-		let token = TextToken::new(TextContent::Register, format!("u{upvalue}"));
+		let token = TextToken::new(bn_format!("u{upvalue}"), TextContent::Register);
 
 		self.buffer.push(token);
 		self.add_separator();
 	}
 
 	fn add_named_integer(&mut self, name: &str) {
-		let token = TextToken::new(TextContent::Integer(0), name);
+		let token = TextToken::new(BnString::new(name), TextContent::Integer(0));
 
 		self.buffer.push(token);
 		self.add_separator();
@@ -86,7 +101,7 @@ impl TextBuilder {
 	}
 
 	fn add_number(&mut self, value: f64) {
-		let token = TextToken::new(TextContent::FloatingPoint, format!("{value}_f64"));
+		let token = TextToken::new(bn_format!("{value}_f64"), TextContent::FloatingPoint);
 
 		self.buffer.push(token);
 		self.add_separator();
@@ -105,8 +120,8 @@ impl TextBuilder {
 		let list = surrounded!(
 			"[",
 			TextToken::new(
+				bn_format!("str_{adjusted}"),
 				TextContent::PossibleAddress(address as u64),
-				format!("str_{adjusted}"),
 			),
 			"]"
 		);
@@ -138,7 +153,11 @@ impl TextBuilder {
 
 	pub fn add_built_in(&mut self, index: u8) -> Option<()> {
 		let name = RefKnown::try_from(index).ok()?.name();
-		let list = surrounded!("\"", TextToken::new(TextContent::FloatingPoint, name), "\"");
+		let list = surrounded!(
+			"\"",
+			TextToken::new(BnString::new(name), TextContent::FloatingPoint,),
+			"\""
+		);
 
 		self.buffer.extend(list);
 		self.add_separator();
@@ -152,8 +171,8 @@ impl TextBuilder {
 		let list = surrounded!(
 			"[",
 			TextToken::new(
+				bn_format!("func_{index}"),
 				TextContent::PossibleAddress(target),
-				format!("func_{index}"),
 			),
 			"]"
 		);

@@ -7,5 +7,5 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-binaryninja = { git = "https://github.com/Vector35/binaryninja-api.git", branch = "master" }
+binaryninja = { git = "https://github.com/Vector35/binaryninja-api.git", rev = "6e282b0e11fa15e9aacddf52f0fedb5ab2f13bbc" }
 num_enum = "0.5.7"
