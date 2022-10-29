@@ -247,7 +247,7 @@ impl Architecture {
 			Value::False => il.reg(NUM_SIZE, Register::False),
 			Value::True => il.reg(NUM_SIZE, Register::True),
 			// TODO: Need float support
-			Value::Number(_) => il.const_int(NUM_SIZE, 1337),
+			Value::Number(f) => il.const_int(NUM_SIZE, f.to_bits()),
 			Value::String(i) => {
 				let list = &parent.string_list().data;
 				let ptr = match i.checked_sub(1) {
