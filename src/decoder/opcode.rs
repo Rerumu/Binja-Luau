@@ -106,9 +106,11 @@ pub enum Opcode {
 	ForGenericLoop,
 
 	ForGenericPrepINext,
+	// DEPRECATED
 	ForGenericLoopINext,
 
 	ForGenericPrepNext,
+	// DEPRECATED
 	ForGenericLoopNext,
 
 	GetVariadic,
@@ -126,12 +128,21 @@ pub enum Opcode {
 	Coverage,
 	Capture,
 
+	// DEPRECATED
 	JumpIfConstant,
+	// DEPRECATED
 	JumpIfNotConstant,
 
 	FastCall1,
 	FastCall2,
 	FastCall2K,
+
+	ForGenericPrep,
+
+	JumpIfNil,
+	JumpIfBoolean,
+	JumpIfNumber,
+	JumpIfString,
 }
 
 impl Opcode {
@@ -156,7 +167,11 @@ impl Opcode {
 			| Self::JumpIfConstant
 			| Self::JumpIfNotConstant
 			| Self::FastCall2
-			| Self::FastCall2K => 8,
+			| Self::FastCall2K
+			| Self::JumpIfNil
+			| Self::JumpIfBoolean
+			| Self::JumpIfNumber
+			| Self::JumpIfString => 8,
 			_ => 4,
 		}
 	}
@@ -239,6 +254,11 @@ impl Opcode {
 			Self::FastCall1 => "fast_call1",
 			Self::FastCall2 => "fast_call2",
 			Self::FastCall2K => "fast_call2_k",
+			Self::ForGenericPrep => "for_generic_prep",
+			Self::JumpIfNil => "jump_if_nil",
+			Self::JumpIfBoolean => "jump_if_boolean",
+			Self::JumpIfNumber => "jump_if_number",
+			Self::JumpIfString => "jump_if_string",
 		}
 	}
 
@@ -323,6 +343,11 @@ impl Opcode {
 			Self::FastCall1 => &[A, B, C],
 			Self::FastCall2 => &[A, B, X, C],
 			Self::FastCall2K => &[A, B, X, C],
+			Self::ForGenericPrep => &[A, D],
+			Self::JumpIfNil => &[A, D, X],
+			Self::JumpIfBoolean => &[A, D, X],
+			Self::JumpIfNumber => &[A, D, X],
+			Self::JumpIfString => &[A, D, X],
 		}
 	}
 
@@ -409,6 +434,11 @@ impl Opcode {
 			Self::FastCall1 => &[BuiltIn, Register, Location],
 			Self::FastCall2 => &[BuiltIn, Register, Register, Location],
 			Self::FastCall2K => &[BuiltIn, Register, Constant, Location],
+			Self::ForGenericPrep => &[Register, Location],
+			Self::JumpIfNil => &[Register, Location, Integer],
+			Self::JumpIfBoolean => &[Register, Location, Integer],
+			Self::JumpIfNumber => &[Register, Location, Integer],
+			Self::JumpIfString => &[Register, Location, Integer],
 		}
 	}
 

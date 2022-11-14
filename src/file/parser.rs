@@ -11,7 +11,7 @@ use super::data::{Function, List, Module, Value};
 type PResult<T> = std::io::Result<T>;
 type Stream<'a> = Cursor<&'a [u8]>;
 
-const LUAU_VERSION: u8 = 2;
+const LUAU_VERSION: u8 = 3;
 
 #[repr(u8)]
 #[derive(TryFromPrimitive)]
