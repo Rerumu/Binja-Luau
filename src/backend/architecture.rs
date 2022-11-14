@@ -74,9 +74,24 @@ impl Architecture {
 			| Opcode::ForGenericPrepNext
 			| Opcode::ForGenericLoopNext
 			| Opcode::JumpIfConstant
-			| Opcode::JumpIfNotConstant => {
+			| Opcode::JumpIfNotConstant
+			| Opcode::ForGenericPrep => {
 				let on_false = Inst::get_jump_target(addr, next);
 				let on_true = Inst::get_jump_target(addr, decoder.d());
+
+				info.add_branch(BranchInfo::False(on_false), None);
+				info.add_branch(BranchInfo::True(on_true), None);
+			}
+			Opcode::JumpIfNil
+			| Opcode::JumpIfBoolean
+			| Opcode::JumpIfNumber
+			| Opcode::JumpIfString => {
+				let mut on_false = Inst::get_jump_target(addr, next);
+				let mut on_true = Inst::get_jump_target(addr, decoder.d());
+
+				if decoder.adjacent() < 0 {
+					std::mem::swap(&mut on_false, &mut on_true);
+				}
 
 				info.add_branch(BranchInfo::False(on_false), None);
 				info.add_branch(BranchInfo::True(on_true), None);
