@@ -272,7 +272,7 @@ impl Opcode {
 			Self::LoadNil => &[A],
 			Self::LoadBoolean => &[A, B, C],
 			Self::LoadInteger => &[A, D],
-			Self::LoadConstant => &[A, B],
+			Self::LoadConstant => &[A, D],
 			Self::Move => &[A, B],
 			Self::GetGlobal => &[A, X],
 			Self::SetGlobal => &[A, X],
