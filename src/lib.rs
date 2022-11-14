@@ -1,4 +1,3 @@
-#![feature(mixed_integer_ops)]
 #![feature(once_cell)]
 
 use binaryninja::{
