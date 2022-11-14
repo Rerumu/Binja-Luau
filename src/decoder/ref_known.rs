@@ -72,6 +72,13 @@ pub enum RefKnown {
 	Countrz,
 
 	Select,
+
+	Rawlen,
+
+	ExtractK,
+
+	GetMetatable,
+	SetMetatable,
 }
 
 impl RefKnown {
@@ -134,6 +141,10 @@ impl RefKnown {
 			RefKnown::Countlz => "bit32.countlz",
 			RefKnown::Countrz => "bit32.countrz",
 			RefKnown::Select => "select",
+			RefKnown::Rawlen => "rawlen",
+			RefKnown::ExtractK => "bit32.extract",
+			RefKnown::GetMetatable => "getmetatable",
+			RefKnown::SetMetatable => "setmetatable",
 		}
 	}
 }
