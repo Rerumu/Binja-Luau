@@ -233,11 +233,7 @@ impl Architecture {
 		Some(())
 	}
 
-	fn get_value(addr: u64, index: usize, parent: &Module) -> Option<&Value> {
-		parent.by_address(addr)?.constant_list().data.get(index)
-	}
-
-	fn get_as_constant<'a>(
+	fn get_constant_value<'a>(
 		il: &'a Lifter<Self>,
 		value: &Value,
 		parent: &Module,
@@ -267,6 +263,14 @@ impl Architecture {
 		};
 
 		Some(result)
+	}
+
+	fn get_constant_index(il: &Lifter<Self>, addr: u64, index: usize) -> Option<Expression> {
+		let parent = MODULE.read().unwrap();
+		let func = parent.by_address(addr)?;
+		let value = func.constant_list().data.get(index)?;
+
+		Self::get_constant_value(il, value, &parent)
 	}
 }
 
@@ -361,9 +365,7 @@ impl BaseArchitecture for Architecture {
 				Self::set_variable(il, decoder.a(), il.const_int(NUM_SIZE, value));
 			}
 			Opcode::LoadConstant => {
-				let module = MODULE.read().unwrap();
-				let reffed = &module.by_address(addr)?.constant_list().data[decoder.d() as usize];
-				let value = Self::get_as_constant(il, reffed, &module)?;
+				let value = Self::get_constant_index(il, addr, decoder.d() as usize)?;
 
 				Self::set_variable(il, decoder.a(), value);
 			}
@@ -480,51 +482,36 @@ impl BaseArchitecture for Architecture {
 			}
 			// Opcode::Pow => todo!(),
 			Opcode::AddConstant => {
-				let module = MODULE.read().unwrap();
-				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
-
 				let lhs = Self::get_variable(il, decoder.b());
-				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let rhs = Self::get_constant_index(il, addr, decoder.c() as usize)?;
 				let result = il.add(NUM_SIZE, lhs, rhs);
 
 				Self::set_variable(il, decoder.a(), result);
 			}
 			Opcode::SubConstant => {
-				let module = MODULE.read().unwrap();
-				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
-
 				let lhs = Self::get_variable(il, decoder.b());
-				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let rhs = Self::get_constant_index(il, addr, decoder.c() as usize)?;
 				let result = il.sub(NUM_SIZE, lhs, rhs);
 
 				Self::set_variable(il, decoder.a(), result);
 			}
 			Opcode::MulConstant => {
-				let module = MODULE.read().unwrap();
-				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
-
 				let lhs = Self::get_variable(il, decoder.b());
-				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let rhs = Self::get_constant_index(il, addr, decoder.c() as usize)?;
 				let result = il.mul(NUM_SIZE, lhs, rhs);
 
 				Self::set_variable(il, decoder.a(), result);
 			}
 			Opcode::DivConstant => {
-				let module = MODULE.read().unwrap();
-				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
-
 				let lhs = Self::get_variable(il, decoder.b());
-				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let rhs = Self::get_constant_index(il, addr, decoder.c() as usize)?;
 				let result = il.divs(NUM_SIZE, lhs, rhs);
 
 				Self::set_variable(il, decoder.a(), result);
 			}
 			Opcode::ModConstant => {
-				let module = MODULE.read().unwrap();
-				let reffed = &module.by_address(addr)?.constant_list().data[decoder.c() as usize];
-
 				let lhs = Self::get_variable(il, decoder.b());
-				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let rhs = Self::get_constant_index(il, addr, decoder.c() as usize)?;
 				let result = il.mods(NUM_SIZE, lhs, rhs);
 
 				Self::set_variable(il, decoder.a(), result);
@@ -562,9 +549,7 @@ impl BaseArchitecture for Architecture {
 			// Opcode::DupClosure => todo!(),
 			// Opcode::PrepVariadic => todo!(),
 			Opcode::LoadConstantEx => {
-				let module = MODULE.read().unwrap();
-				let reffed = Self::get_value(addr, decoder.adjacent() as usize, &module)?;
-				let value = Self::get_as_constant(il, reffed, &module)?;
+				let value = Self::get_constant_index(il, addr, decoder.adjacent() as usize)?;
 
 				Self::set_variable(il, decoder.a(), value);
 			}
@@ -577,19 +562,15 @@ impl BaseArchitecture for Architecture {
 			// Opcode::Coverage => todo!(),
 			// Opcode::Capture => todo!(),
 			Opcode::JumpIfConstant => {
-				let module = MODULE.read().unwrap();
-				let reffed = Self::get_value(addr, decoder.adjacent() as usize, &module)?;
 				let lhs = Self::get_variable(il, decoder.a());
-				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let rhs = Self::get_constant_index(il, addr, decoder.adjacent() as usize)?;
 				let cond = il.cmp_e(NUM_SIZE, lhs, rhs);
 
 				Self::add_if_condition(il, addr, decoder.d(), cond);
 			}
 			Opcode::JumpIfNotConstant => {
-				let module = MODULE.read().unwrap();
-				let reffed = Self::get_value(addr, decoder.adjacent() as usize, &module)?;
 				let lhs = Self::get_variable(il, decoder.a());
-				let rhs = Self::get_as_constant(il, reffed, &module)?;
+				let rhs = Self::get_constant_index(il, addr, decoder.adjacent() as usize)?;
 				let cond = il.cmp_ne(NUM_SIZE, lhs, rhs);
 
 				Self::add_if_condition(il, addr, decoder.d(), cond);
