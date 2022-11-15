@@ -6,7 +6,7 @@ use binaryninja::{
 	binaryninjacore_sys::BNLowLevelILFlagCondition,
 	callingconvention::CallingConventionBase,
 	disassembly::InstructionTextToken,
-	llil::{Label, LiftedExpr, Lifter},
+	llil::{LiftedExpr, Lifter},
 	Endianness,
 };
 
@@ -48,7 +48,7 @@ impl Architecture {
 
 	fn get_opt_instruction_info(decoder: Inst, addr: u64) -> InstructionInfo {
 		let op = decoder.op();
-		let next = op.len() as i64 / 4 - 1;
+		let next = addr + op.len() as u64;
 
 		let mut info = InstructionInfo::new(op.len(), false);
 
@@ -89,17 +89,16 @@ impl Architecture {
 			| Opcode::JumpIfConstant
 			| Opcode::JumpIfNotConstant
 			| Opcode::ForGenericPrep => {
-				let on_false = Inst::get_jump_target(addr, next);
 				let on_true = Inst::get_jump_target(addr, decoder.d());
 
-				info.add_branch(BranchInfo::False(on_false), None);
+				info.add_branch(BranchInfo::False(next), None);
 				info.add_branch(BranchInfo::True(on_true), None);
 			}
 			Opcode::JumpIfNil
 			| Opcode::JumpIfBoolean
 			| Opcode::JumpIfNumber
 			| Opcode::JumpIfString => {
-				let mut on_false = Inst::get_jump_target(addr, next);
+				let mut on_false = next;
 				let mut on_true = Inst::get_jump_target(addr, decoder.d());
 
 				if decoder.adjacent() < 0 {
@@ -110,11 +109,10 @@ impl Architecture {
 				info.add_branch(BranchInfo::True(on_true), None);
 			}
 			Opcode::FastCall | Opcode::FastCall1 | Opcode::FastCall2 | Opcode::FastCall2K => {
-				let on_false = Inst::get_jump_target(addr, next);
 				let on_true = Inst::get_jump_target(addr, decoder.c() + 1);
 
 				info.add_branch(BranchInfo::Indirect, None);
-				info.add_branch(BranchInfo::False(on_false), None);
+				info.add_branch(BranchInfo::False(next), None);
 				info.add_branch(BranchInfo::True(on_true), None);
 			}
 			_ => {}
@@ -213,22 +211,24 @@ impl Architecture {
 		Some((var_1, var_2))
 	}
 
-	fn add_if_condition<'a, O, C>(
+	fn add_if_condition<'a, C>(
 		il: &Lifter<Self>,
+		decoder: Inst,
 		addr: u64,
-		offset: O,
 		condition: C,
 	) -> Option<()>
 	where
-		O: Into<i64>,
 		C: Into<Expression<'a>>,
 	{
-		let target = Inst::get_jump_target(addr, offset);
-		let on_true = il.label_for_address(target)?;
-		let mut on_false = Label::new();
+		let on_true = Inst::get_jump_target(addr, decoder.d());
+		let on_false = addr + decoder.op().len() as u64;
 
-		il.if_expr(condition.into(), on_true, &on_false).append();
-		il.mark_label(&mut on_false);
+		il.if_expr(
+			condition.into(),
+			il.label_for_address(on_true)?,
+			il.label_for_address(on_false)?,
+		)
+		.append();
 
 		Some(())
 	}
@@ -406,49 +406,49 @@ impl BaseArchitecture for Architecture {
 			Opcode::JumpIfTruthy => {
 				let cond = Self::get_variable(il, decoder.a());
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::JumpIfFalsy => {
 				let variable = Self::get_variable(il, decoder.a());
 				let cond = il.not(NUM_SIZE, variable);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::JumpIfEqual => {
 				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
 				let cond = il.cmp_e(NUM_SIZE, lhs, rhs);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::JumpIfLessEqual => {
 				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
 				let cond = il.cmp_sle(NUM_SIZE, lhs, rhs);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::JumpIfLessThan => {
 				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
 				let cond = il.cmp_slt(NUM_SIZE, lhs, rhs);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::JumpIfNotEqual => {
 				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
 				let cond = il.cmp_ne(NUM_SIZE, lhs, rhs);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::JumpIfMoreThan => {
 				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
 				let cond = il.cmp_sgt(NUM_SIZE, lhs, rhs);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::JumpIfMoreEqual => {
 				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.a(), decoder.adjacent())?;
 				let cond = il.cmp_sge(NUM_SIZE, lhs, rhs);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::Add => {
 				let (lhs, rhs) = Self::get_two_var_operands(il, decoder.b(), decoder.c())?;
@@ -566,14 +566,14 @@ impl BaseArchitecture for Architecture {
 				let rhs = Self::get_constant_index(il, addr, decoder.adjacent() as usize)?;
 				let cond = il.cmp_e(NUM_SIZE, lhs, rhs);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			Opcode::JumpIfNotConstant => {
 				let lhs = Self::get_variable(il, decoder.a());
 				let rhs = Self::get_constant_index(il, addr, decoder.adjacent() as usize)?;
 				let cond = il.cmp_ne(NUM_SIZE, lhs, rhs);
 
-				Self::add_if_condition(il, addr, decoder.d(), cond);
+				Self::add_if_condition(il, decoder, addr, cond);
 			}
 			// Opcode::FastCall1 => todo!(),
 			// Opcode::FastCall2 => todo!(),
