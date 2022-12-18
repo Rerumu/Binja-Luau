@@ -2,7 +2,7 @@ use num_enum::TryFromPrimitive;
 
 #[repr(u8)]
 #[derive(TryFromPrimitive, Clone, Copy)]
-pub enum RefKnown {
+pub enum BuiltIn {
 	Assert = 1,
 
 	Abs,
@@ -81,7 +81,7 @@ pub enum RefKnown {
 	SetMetatable,
 }
 
-impl RefKnown {
+impl BuiltIn {
 	pub fn name(self) -> &'static str {
 		match self {
 			Self::Assert => "assert",

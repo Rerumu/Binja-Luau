@@ -1,7 +1,7 @@
 use binaryninja::string::BnString;
 
 use crate::{
-	decoder::{inst::Inst, opcode::Opcode, ref_known::RefKnown, ref_unknown::RefUnknown},
+	decoder::{builtin::BuiltIn, import::Import, inst::Inst, opcode::Opcode},
 	file::data::{Function, Module, Range, Value},
 };
 
@@ -152,7 +152,7 @@ impl TextBuilder {
 	}
 
 	pub fn add_built_in(&mut self, index: u8) -> Option<()> {
-		let name = RefKnown::try_from(index).ok()?.name();
+		let name = BuiltIn::try_from(index).ok()?.name();
 		let list = surrounded!(
 			"\"",
 			TextToken::new(BnString::new(name), TextContent::FloatingPoint,),
@@ -186,7 +186,7 @@ impl TextBuilder {
 	pub fn add_import(&mut self, encoded: u32, func: &Function, parent: &Module) -> Option<()> {
 		let list = &func.constant_list().data;
 
-		for name in RefUnknown::from(encoded) {
+		for name in Import::from(encoded) {
 			let value = list.get(name)?;
 
 			self.add_constant(value, func, parent)?;
