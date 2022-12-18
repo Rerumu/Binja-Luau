@@ -9,3 +9,4 @@ crate-type = ["cdylib"]
 [dependencies]
 binaryninja = { git = "https://github.com/Vector35/binaryninja-api.git", rev = "9912e2bdbc73c4984b94c1f8854ad7b960f5b252" }
 num_enum = "0.5.7"
+once_cell = "1.16.0"

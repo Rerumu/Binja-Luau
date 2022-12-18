@@ -1,4 +1,4 @@
-use std::{ops::Range, sync::LazyLock, sync::RwLock};
+use std::{ops::Range, sync::RwLock};
 
 use binaryninja::{
 	architecture::{ArchitectureExt, CoreArchitecture},
@@ -14,10 +14,11 @@ use binaryninja::{
 	types::Type,
 	Endianness,
 };
+use once_cell::sync::Lazy;
 
 use super::{data::Module, parser::parse};
 
-pub static MODULE: LazyLock<RwLock<Module>> = LazyLock::new(RwLock::default);
+pub static MODULE: Lazy<RwLock<Module>> = Lazy::new(RwLock::default);
 
 pub struct Builder {
 	pub typ: BinaryViewType,

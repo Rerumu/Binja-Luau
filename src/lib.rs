@@ -1,5 +1,3 @@
-#![feature(once_cell)]
-
 use binaryninja::{
 	architecture::register_architecture, callingconvention::register_calling_convention,
 	custombinaryview::register_view_type,
